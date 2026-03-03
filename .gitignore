@@ -1,0 +1,7 @@
+# Secretos – NUNCA subir al repositorio
+.streamlit/secrets.toml
+
+# Entorno virtual
+.venv/
+__pycache__/
+*.pyc

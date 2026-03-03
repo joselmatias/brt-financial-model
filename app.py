@@ -24,6 +24,55 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
+#  LOGIN / AUTENTICACIÓN
+# ─────────────────────────────────────────────
+def _check_password() -> bool:
+    """Muestra formulario de login y devuelve True si el usuario está autenticado."""
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.markdown("""
+    <style>
+    .login-box {
+        max-width: 380px;
+        margin: 6rem auto 0;
+        padding: 2.5rem 2rem;
+        background: #ffffff;
+        border: 1px solid #dee2e6;
+        border-radius: 14px;
+        box-shadow: 0 4px 20px rgba(0,0,0,.08);
+        text-align: center;
+    }
+    .login-box h2 { color: #1F4E79; margin-bottom: 0.2rem; font-size: 1.5rem; }
+    .login-box p  { color: #6c757d; font-size: 0.88rem; margin-bottom: 1.5rem; }
+    </style>
+    <div class="login-box">
+        <h2>🚌 Flujo de Caja BRT</h2>
+        <p>Panel Ejecutivo · Agencia Metrovía</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.form("login_form"):
+        st.markdown("### Acceso restringido")
+        pwd = st.text_input("Contraseña", type="password", placeholder="Ingresa la clave de acceso")
+        submitted = st.form_submit_button("Ingresar", use_container_width=True)
+
+    if submitted:
+        correct = st.secrets.get("password", "")
+        if pwd == correct:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Contraseña incorrecta. Intenta de nuevo.")
+
+    return False
+
+
+if not _check_password():
+    st.stop()
+
+
+# ─────────────────────────────────────────────
 #  CSS PERSONALIZADO
 # ─────────────────────────────────────────────
 st.markdown("""
