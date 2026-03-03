@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 
-from funciones import calcular_modelo, exportar_excel
+from funciones import calcular_modelo, calcular_consolidado, exportar_excel
 from parametros import TOOLTIPS, TRONCALES
 
 # ─────────────────────────────────────────────
@@ -173,9 +173,15 @@ def render_sidebar() -> dict:
         # ── Selector de troncal ──────────────────────────────────
         troncal_sel = st.selectbox(
             "Troncal",
-            options=list(TRONCALES.keys()),
-            help="Selecciona la troncal a analizar."
+            options=list(TRONCALES.keys()) + ["Consolidado"],
+            help="Selecciona la troncal a analizar. 'Consolidado' agrega T1+T2+T3+T4."
         )
+
+        # Vista consolidada: no tiene parámetros propios editables
+        if troncal_sel == "Consolidado":
+            st.info("Suma de T1 + T2 + T3 + T4 con los parámetros base de cada troncal.")
+            p = copy.deepcopy(TRONCALES["Troncal 1"])
+            return p, troncal_sel
 
         # Prefijo único por troncal: garantiza que al cambiar de troncal
         # todos los widgets se re-creen con los valores correctos.
@@ -635,6 +641,9 @@ def render_tab_exportar(res: dict, p: dict, troncal_sel: str):
 
     st.divider()
     st.subheader("Resumen de parámetros activos")
+    if troncal_sel == "Consolidado":
+        st.info("Vista consolidada: cada troncal usa sus propios parámetros base definidos en parametros.py.")
+        return
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Demanda base (Año 1)**")
@@ -676,11 +685,21 @@ def main():
         params = json.loads(p_frozen)
         return calcular_modelo(params)
 
+    @st.cache_data(show_spinner="Calculando consolidado T1+T2+T3+T4…")
+    def _calcular_consolidado(troncales_frozen: str) -> dict:
+        import json
+        params = json.loads(troncales_frozen)
+        return calcular_consolidado(params)
+
     import json
 
     try:
-        p_frozen = json.dumps(p, sort_keys=True, default=str)
-        resultado = _calcular(p_frozen)
+        if troncal_sel == "Consolidado":
+            troncales_frozen = json.dumps(TRONCALES, sort_keys=True, default=str)
+            resultado = _calcular_consolidado(troncales_frozen)
+        else:
+            p_frozen = json.dumps(p, sort_keys=True, default=str)
+            resultado = _calcular(p_frozen)
     except ValueError as e:
         st.error(f"⚠️ Parámetro inválido: {e}")
         st.stop()

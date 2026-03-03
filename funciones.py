@@ -526,6 +526,202 @@ def calcular_modelo(p: dict) -> dict:
 
 
 # ─────────────────────────────────────────────
+#  CONSOLIDADO (T1 + T2 + T3 + T4)
+# ─────────────────────────────────────────────
+
+def calcular_consolidado(troncales_params: dict) -> dict:
+    """
+    Corre calcular_modelo() para cada troncal y consolida los resultados.
+    Los parámetros comunes (tarifas, tasas, fee, etc.) se toman de la primera troncal.
+    """
+    resultados = {nombre: calcular_modelo(p) for nombre, p in troncales_params.items()}
+
+    p0   = list(troncales_params.values())[0]
+    anios = int(p0["anios"])
+    cols  = _cols_anios(anios)
+    cols_0aN = ["Año 0"] + cols
+    tarifas  = p0["tarifas"]
+    cats     = list(p0["base_demanda"].keys())
+
+    # ── DEMANDA consolidada ───────────────────────────────────────
+    demanda_cons = pd.DataFrame(0.0, index=cats, columns=cols)
+    for res in resultados.values():
+        demanda_cons += res["demanda"].loc[cats, cols].astype(float)
+    demanda_cons.loc["TOTAL DEMANDA"] = demanda_cons.sum(axis=0)
+    demanda_cons["TOTAL"] = demanda_cons.sum(axis=1)
+    serie_dem_cons = demanda_cons.loc["TOTAL DEMANDA", cols].astype(float)
+    _add_year0(demanda_cons)
+
+    # ── DEMANDA EQUIVALENTE consolidada ──────────────────────────
+    demanda_equiv_cons = pd.DataFrame(0.0, index=cats, columns=cols)
+    for res in resultados.values():
+        de = res["demanda_equivalente"]
+        avail = [c for c in cats if c in de.index]
+        demanda_equiv_cons.loc[avail] += de.loc[avail, cols].astype(float)
+    demanda_equiv_cons.loc["TOTAL DEMANDA EQUIVALENTE"] = demanda_equiv_cons.sum(axis=0)
+    demanda_equiv_cons["TOTAL"] = demanda_equiv_cons.sum(axis=1)
+    _add_year0(demanda_equiv_cons)
+
+    # ── INGRESOS consolidados ─────────────────────────────────────
+    ingresos_cons       = calcular_ingresos_por_categoria(demanda_cons.loc[cats], tarifas)
+    ingresos_equiv_cons = calcular_ingresos_por_categoria(demanda_equiv_cons.loc[cats], tarifas)
+    _add_year0(ingresos_cons)
+    _add_year0(ingresos_equiv_cons)
+    serie_ing_cons = ingresos_cons.loc["TOTAL INGRESOS", cols].astype(float)
+
+    # ── FEE METROVÍA consolidada ──────────────────────────────────
+    df_fee_c = pd.DataFrame(
+        [(serie_dem_cons * p0["fee_metrovia_por_pasajero"]).tolist()],
+        index=["Fee Metrovía (0.02 × demanda)"], columns=cols
+    ).astype(float).round(2)
+    df_fee_c.loc["TOTAL FEE METROVÍA"] = df_fee_c.sum(axis=0)
+    df_fee_c["TOTAL"] = df_fee_c.sum(axis=1)
+    _add_year0(df_fee_c)
+
+    # ── ITOR consolidado ──────────────────────────────────────────
+    itor_op  = (serie_ing_cons * p0["itor_porcentaje_oper_recaudo"]).tolist()
+    itor_tv  = sum(res["df_itor"].loc["Costo de Transporte de Valores",       cols].astype(float) for res in resultados.values()).tolist()
+    itor_fid = sum(res["df_itor"].loc["Costo de Fideicomiso Administración",  cols].astype(float) for res in resultados.values()).tolist()
+    df_itor_c = pd.DataFrame(
+        [itor_op, itor_tv, itor_fid],
+        index=["Costo de Operación y Recaudo (9.95% ingresos)",
+               "Costo de Transporte de Valores",
+               "Costo de Fideicomiso Administración"],
+        columns=cols
+    ).astype(float).round(2)
+    df_itor_c.loc["TOTAL OTROS COSTOS (ITOR)"] = df_itor_c.sum(axis=0)
+    df_itor_c["TOTAL"] = df_itor_c.sum(axis=1)
+    _add_year0(df_itor_c)
+
+    # ── COSTOS VARIABLES OPERATIVOS consolidados ──────────────────
+    cv_rows = [
+        "Mantenimiento (Troncal 18 m)", "Mantenimiento (Alimentación 12 m)", "SUBTOTAL MANTENIMIENTO",
+        "Combustible (Troncal 18 m)",   "Combustible (Alimentación 12 m)",   "SUBTOTAL COMBUSTIBLE",
+        "Neumáticos",
+    ]
+    costos_variables_op_c = pd.DataFrame(0.0, index=cv_rows, columns=cols)
+    for res in resultados.values():
+        for row in cv_rows:
+            if row in res["costos_variables_op"].index:
+                costos_variables_op_c.loc[row] += res["costos_variables_op"].loc[row, cols].astype(float)
+    serie_cv_oper = sum(
+        res["costos_variables_op"].loc["SUBTOTAL COSTOS VARIABLES (operativos)", cols].astype(float)
+        for res in resultados.values()
+    )
+    costos_variables_op_c.loc["SUBTOTAL COSTOS VARIABLES (operativos)"] = serie_cv_oper
+    costos_variables_op_c["TOTAL"] = costos_variables_op_c.sum(axis=1)
+    costos_variables_op_c = costos_variables_op_c.round(2)
+    _add_year0(costos_variables_op_c)
+
+    # ── TOTAL COSTOS VARIABLES ────────────────────────────────────
+    serie_cv_total = (
+        serie_cv_oper
+        + df_itor_c.loc["TOTAL OTROS COSTOS (ITOR)", cols].astype(float)
+        + df_fee_c.loc["TOTAL FEE METROVÍA", cols].astype(float)
+    )
+    df_total_cv_c = pd.DataFrame(
+        [serie_cv_total.tolist()], index=["TOTAL COSTOS VARIABLES"], columns=cols
+    ).astype(float).round(2)
+    df_total_cv_c["TOTAL"] = df_total_cv_c.sum(axis=1)
+    _add_year0(df_total_cv_c)
+
+    # ── COSTOS FIJOS consolidados ─────────────────────────────────
+    serie_cf = sum(
+        res["costos_fijos"].loc["TOTAL COSTOS FIJOS", cols].astype(float)
+        for res in resultados.values()
+    )
+    costos_fijos_c = pd.DataFrame(
+        [serie_cf.tolist()], index=["TOTAL COSTOS FIJOS"], columns=cols
+    ).astype(float).round(2)
+    costos_fijos_c["TOTAL"] = costos_fijos_c.sum(axis=1)
+    _add_year0(costos_fijos_c)
+
+    # ── COSTOS TOTALES ─────────────────────────────────────────────
+    serie_ct = (
+        df_total_cv_c.loc["TOTAL COSTOS VARIABLES", cols].astype(float)
+        + costos_fijos_c.loc["TOTAL COSTOS FIJOS", cols].astype(float)
+    )
+    df_costos_totales_c = pd.DataFrame(
+        [serie_ct.tolist()], index=["COSTOS TOTALES"], columns=cols
+    ).astype(float).round(2)
+    df_costos_totales_c["TOTAL"] = df_costos_totales_c.sum(axis=1)
+    _add_year0(df_costos_totales_c)
+
+    # ── UTILIDAD E IMPUESTO ───────────────────────────────────────
+    serie_ub = serie_ing_cons - serie_ct
+    df_utilidad_bruta_c = pd.DataFrame(
+        [serie_ub.tolist()], index=["UTILIDAD BRUTA"], columns=cols
+    ).astype(float).round(2)
+    df_utilidad_bruta_c["TOTAL"] = df_utilidad_bruta_c.sum(axis=1)
+    _add_year0(df_utilidad_bruta_c)
+
+    serie_ir = np.where(serie_ub > 0, serie_ub * p0["tasa_impuesto_renta"], 0.0)
+    df_imp_renta_c = pd.DataFrame(
+        [serie_ir.tolist()],
+        index=["Impuesto a la renta (25% util. > 0)"], columns=cols
+    ).astype(float).round(2)
+    df_imp_renta_c["TOTAL"] = df_imp_renta_c.sum(axis=1)
+    _add_year0(df_imp_renta_c)
+
+    # ── FLUJO DE CAJA ─────────────────────────────────────────────
+    aporte_equity_0 = sum(
+        float(res["df_flujo"].loc["FLUJO DE CAJA", "Año 0"])
+        for res in resultados.values()
+    )  # ya es negativo (suma de los 4)
+    serie_flujo = (serie_ub - pd.Series(serie_ir, index=cols)).tolist()
+    df_flujo_c = pd.DataFrame(
+        [[aporte_equity_0] + serie_flujo],
+        index=["FLUJO DE CAJA"],
+        columns=["Año 0"] + cols
+    ).astype(float).round(2)
+    df_flujo_c["TOTAL"] = df_flujo_c.loc["FLUJO DE CAJA", cols_0aN].sum()
+
+    # ── FLUJO ACUMULADO ───────────────────────────────────────────
+    flujos_0aN = df_flujo_c.loc["FLUJO DE CAJA", cols_0aN].astype(float).values
+    df_flujo_acum_c = pd.DataFrame(
+        [np.cumsum(flujos_0aN).tolist()],
+        index=["FLUJO DE CAJA ACUMULADO"],
+        columns=cols_0aN
+    ).astype(float).round(2)
+    df_flujo_acum_c["TOTAL"] = flujos_0aN.sum()
+
+    # ── KPIs ──────────────────────────────────────────────────────
+    van     = npv(p0["tasa_descuento"], flujos_0aN)
+    tir     = irr_biseccion(flujos_0aN)
+    payback = calcular_payback(flujos_0aN)
+
+    return {
+        "demanda":               demanda_cons,
+        "demanda_equivalente":   demanda_equiv_cons,
+        "ingresos":              ingresos_cons,
+        "ingresos_equivalentes": ingresos_equiv_cons,
+        "costos_variables_op":   costos_variables_op_c,
+        "df_itor":               df_itor_c,
+        "df_fee":                df_fee_c,
+        "df_total_cv":           df_total_cv_c,
+        "costos_fijos":          costos_fijos_c,
+        "df_costos_totales":     df_costos_totales_c,
+        "df_utilidad_bruta":     df_utilidad_bruta_c,
+        "df_imp_renta":          df_imp_renta_c,
+        "df_flujo":              df_flujo_c,
+        "df_flujo_acum":         df_flujo_acum_c,
+        # Series para gráficos
+        "cols_0aN":       cols_0aN,
+        "cols_anios":     cols,
+        "flujos_0aN":     flujos_0aN,
+        "serie_ingresos": ingresos_cons.loc["TOTAL INGRESOS", cols].astype(float).values,
+        "serie_costos":   df_costos_totales_c.loc["COSTOS TOTALES", cols].astype(float).values,
+        "serie_cv":       df_total_cv_c.loc["TOTAL COSTOS VARIABLES", cols].astype(float).values,
+        "serie_cf":       costos_fijos_c.loc["TOTAL COSTOS FIJOS", cols].astype(float).values,
+        # KPIs
+        "van":          van,
+        "tir":          tir,
+        "flujo_ultimo": flujos_0aN[-1],
+        "payback":      payback,
+    }
+
+
+# ─────────────────────────────────────────────
 #  EXPORTACIÓN A EXCEL
 # ─────────────────────────────────────────────
 
