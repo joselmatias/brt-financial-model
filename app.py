@@ -11,7 +11,7 @@ import plotly.express as px
 import streamlit as st
 
 from funciones import calcular_modelo, exportar_excel
-from parametros import ESCENARIOS, TOOLTIPS, TRONCALES
+from parametros import TOOLTIPS, TRONCALES
 
 # ─────────────────────────────────────────────
 #  CONFIGURACIÓN DE PÁGINA
@@ -128,22 +128,12 @@ def render_sidebar() -> dict:
             help="Selecciona la troncal a analizar."
         )
 
-        # ── Selector de escenario ────────────────────────────────
-        escenario_sel = st.selectbox(
-            "Escenario",
-            options=list(ESCENARIOS.keys()),
-            index=0,
-            help="Carga un conjunto de parámetros pre-configurado."
-        )
+        # Cargamos los parámetros de la troncal seleccionada
+        p = copy.deepcopy(TRONCALES[troncal_sel])
 
-        # Cargamos el escenario seleccionado como punto de partida
-        p = copy.deepcopy(ESCENARIOS[escenario_sel])
-
-        col_reset, col_info = st.columns([2, 1])
-        with col_reset:
-            if st.button("↺ Restablecer Base", use_container_width=True):
-                p = copy.deepcopy(ESCENARIOS["Base"])
-                st.rerun()
+        if st.button("↺ Restablecer valores", use_container_width=True):
+            p = copy.deepcopy(TRONCALES[troncal_sel])
+            st.rerun()
 
         st.divider()
 

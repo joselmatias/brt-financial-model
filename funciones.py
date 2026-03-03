@@ -449,7 +449,15 @@ def calcular_modelo(p: dict) -> dict:
     df_imp_renta["TOTAL"] = df_imp_renta.sum(axis=1)
 
     # ── FLUJO DE CAJA ─────────────────────────────────────────────
-    aporte_equity = (p["precio_bus_alimentador"] * p["unidades_alim"]) * p["porcentaje_equity"]
+    # T1: equity solo sobre alimentadores; T2: sobre troncal + alimentadores
+    if p.get("equity_incluye_troncal", False):
+        base_equity = (
+            p["precio_bus_troncal"]    * p["unidades_troncal"] +
+            p["precio_bus_alimentador"] * p["unidades_alim"]
+        )
+    else:
+        base_equity = p["precio_bus_alimentador"] * p["unidades_alim"]
+    aporte_equity = base_equity * p["porcentaje_equity"]
     serie_flujo = (
         serie_ub - df_imp_renta.loc["Impuesto a la renta (25% util. > 0)", cols].astype(float)
     ).tolist()

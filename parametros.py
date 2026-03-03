@@ -134,6 +134,10 @@ TRONCAL_1_DEFAULT = {
 
     # --- Impuesto ---
     "tasa_impuesto_renta": 0.25,  # 25%
+
+    # --- Equity: incluye buses troncales además de alimentadores ---
+    # Troncal 1: solo alimentadores aportan equity en Año 0
+    "equity_incluye_troncal": False,
 }
 
 # ---------- ESCENARIOS PRE-CONFIGURADOS ----------
@@ -197,11 +201,143 @@ ESCENARIOS = {
     "Optimista":    ESCENARIO_OPTIMISTA,
 }
 
+# ---------- TRONCAL 2 – Parámetros por defecto ----------
+TRONCAL_2_DEFAULT = {
+    # --- Identificación ---
+    "nombre": "Troncal 2",
+
+    # --- Horizonte temporal ---
+    "anios": 12,
+
+    # --- Demanda base (Año 1) – menor que Troncal 1 ---
+    "base_demanda": {
+        "ESTUDIANTES":             240_412,
+        "ADULTOS MAYORES":       1_331_177,
+        "CAPACIDADES ESPECIALES":  437_105,
+        "GENERAL":              14_811_234,
+    },
+
+    # --- Tarifas (USD por pasajero) – iguales a Troncal 1 ---
+    "tarifas": {
+        "ESTUDIANTES":              0.15,
+        "ADULTOS MAYORES":          0.15,
+        "CAPACIDADES ESPECIALES":   0.10,
+        "GENERAL":                  0.45,
+    },
+
+    # --- Tasas de crecimiento anuales (11 valores para 12 años) ---
+    "tasas_por_anio": [
+        0.0091, 0.0091, 0.0090, 0.0089, 0.0088,
+        0.0087, 0.0087, 0.0086, 0.0085, 0.0084, 0.0084
+    ],
+
+    # --- Equivalencia (divisor por categoría) ---
+    "divisores_equivalencia": {
+        "ESTUDIANTES":              2,
+        "ADULTOS MAYORES":          2,
+        "CAPACIDADES ESPECIALES":   3,
+        "GENERAL":                  1,
+    },
+
+    # --- Modo de redondeo para proyección de demanda ---
+    "modo_redondeo": "floor",
+
+    # --- Costos Variables: Mantenimiento ---
+    "divisor_meses":  12,
+    "div_pre_7":       2.0,
+    "div_post_7":      1.5,
+
+    # Troncal (buses 12 m – diferente a T1 que usa 18 m)
+    "km_totales_troncal": 1_145_145.46,
+    "costo_km_troncal":           0.22,   # buses 12 m
+    "unidades_troncal":             42,
+
+    # Alimentación (buses 12 m)
+    "km_totales_alim_12y": 1_015_167,
+    "costo_km_alim":              0.22,
+    "unidades_alim":                30,
+
+    # --- Costos Variables: Combustible ---
+    "precio_galon":            2.80,
+    "rend_km_gal_alim":        5.76,   # km/gal buses 12 m
+    "rend_km_gal_troncal":     5.76,   # km/gal buses 12 m (misma flota)
+    "combustible_aplica_prorrateo": False,
+
+    # --- Costos Variables: Neumáticos ---
+    "costo_llanta":                   450.0,
+    "llantas_por_bus_troncal":           10,
+    "llantas_por_bus_alim":               6,
+    "renovaciones_llantas_por_anio":      1,
+
+    # --- Costos Fijos: Financiamiento ---
+    "precio_bus_troncal":       350_000.0,
+    "precio_bus_alimentador":   156_848.0,
+    "tasa_interes_anual":          0.0948,
+    "plazo_anios_financ":               7,
+    "porcentaje_financiado":         0.80,
+    "porcentaje_equity":             0.20,
+
+    # --- Costos Fijos: Sueldos ---
+    "salario_mensual":             900.0,
+    "choferes_por_bus_troncal":      2.4,
+    "choferes_por_bus_alim":         2.4,
+
+    # --- Costos Fijos: Gastos Administrativos (mensuales) ---
+    "gastos_adm_items": [
+        {"rubro": "Gerente",                 "cantidad": 1, "precio": 2500},
+        {"rubro": "Presidente",              "cantidad": 1, "precio": 1800},
+        {"rubro": "Asistente (Adm.)",        "cantidad": 1, "precio":  700},
+        {"rubro": "Jefe de talento humano",  "cantidad": 1, "precio": 1200},
+        {"rubro": "Asistente TH",            "cantidad": 1, "precio":  700},
+        {"rubro": "Jefe de contabilidad",    "cantidad": 1, "precio": 1200},
+        {"rubro": "Asistente contable",      "cantidad": 1, "precio":  700},
+        {"rubro": "Operaciones",             "cantidad": 5, "precio":  500},
+        {"rubro": "Jefe de infraestructura", "cantidad": 1, "precio": 1200},
+        {"rubro": "Asistente (Infraest.)",   "cantidad": 1, "precio":  700},
+        {"rubro": "Bodega",                  "cantidad": 3, "precio":  650},
+        {"rubro": "Compras",                 "cantidad": 1, "precio":  500},
+        {"rubro": "Salud Ocupacional",       "cantidad": 1, "precio":  800},
+        {"rubro": "Jurídico",                "cantidad": 1, "precio": 1200},
+    ],
+
+    # --- Costos Fijos: Seguros ---
+    "seguro_fiel_cumpl":           7_500.0,
+    "seguro_todo_riesgo_unidades": 70_000.0,
+
+    # --- Costos Fijos: Servicios básicos ---
+    "serv_basicos_mensual": 1_400.0,
+
+    # --- Costos Fijos: Matrícula e impuestos ---
+    "matricula_precio":         250.00,
+    "iva_compras":           11_500.00,
+    "seg_unid_precio_mensual":  144.59,
+
+    # --- Costos Fijos: Otros administrativos ---
+    "otros_adm_anual": 14_000.00,
+
+    # --- Otros Costos: ITOR ---
+    "itor_porcentaje_oper_recaudo":  0.0995,
+    "itor_transporte_valores_anual": 104_430.27,
+    "itor_fideicomiso_admin_anual":   15_600.00,
+
+    # --- Fee Metrovía ---
+    "fee_metrovia_por_pasajero": 0.02,
+
+    # --- Parámetros macroeconómicos ---
+    "inflacion_anual":  0.0155,
+    "tasa_descuento":   0.12,
+
+    # --- Impuesto ---
+    "tasa_impuesto_renta": 0.25,
+
+    # --- Equity: Troncal 2 incluye AMBAS flotas (troncal + alimentadores) ---
+    "equity_incluye_troncal": True,
+}
+
 # ---------- CATÁLOGO DE TRONCALES (para escalar) ----------
-# Agregar aquí nuevas troncales cuando estén disponibles.
 TRONCALES = {
     "Troncal 1": TRONCAL_1_DEFAULT,
-    # "Troncal 2": TRONCAL_2_DEFAULT,  # Habilitar cuando esté listo
+    "Troncal 2": TRONCAL_2_DEFAULT,
 }
 
 # ---------- TOOLTIPS PARA LA UI ----------
