@@ -243,6 +243,17 @@ def render_sidebar() -> dict:
 
         # ── MANTENIMIENTO ────────────────────────────────────────
         with st.expander("🔧 Mantenimiento", expanded=False):
+            p["km_totales_troncal"] = st.number_input(
+                "Km totales troncal", min_value=1,
+                value=int(p["km_totales_troncal"]), step=1_000, format="%d",
+                help=TOOLTIPS["km_totales_troncal"], key=f"{t}_km_troncal"
+            )
+            p["km_totales_alim_12y"] = st.number_input(
+                "Km totales alimentación", min_value=1,
+                value=int(p["km_totales_alim_12y"]), step=1_000, format="%d",
+                help=TOOLTIPS["km_totales_alim_12y"], key=f"{t}_km_alim"
+            )
+            st.divider()
             p["costo_km_troncal"] = st.number_input(
                 "Costo/km troncal (USD)", min_value=0.01,
                 value=float(p["costo_km_troncal"]), step=0.01, format="%.2f",
