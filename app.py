@@ -128,6 +128,10 @@ def render_sidebar() -> dict:
             help="Selecciona la troncal a analizar."
         )
 
+        # Prefijo único por troncal: garantiza que al cambiar de troncal
+        # todos los widgets se re-creen con los valores correctos.
+        t = troncal_sel.replace(" ", "_")
+
         # Cargamos los parámetros de la troncal seleccionada
         p = copy.deepcopy(TRONCALES[troncal_sel])
 
@@ -143,7 +147,7 @@ def render_sidebar() -> dict:
             for cat in list(p["base_demanda"].keys()):
                 p["base_demanda"][cat] = st.number_input(
                     cat, min_value=0, value=int(p["base_demanda"][cat]),
-                    step=1_000, format="%d", key=f"dem_{cat}"
+                    step=1_000, format="%d", key=f"{t}_dem_{cat}"
                 )
 
         # ── TARIFAS ──────────────────────────────────────────────
@@ -153,20 +157,19 @@ def render_sidebar() -> dict:
                 p["tarifas"][cat] = st.number_input(
                     cat, min_value=0.01, max_value=10.0,
                     value=float(p["tarifas"][cat]),
-                    step=0.01, format="%.2f", key=f"tar_{cat}"
+                    step=0.01, format="%.2f", key=f"{t}_tar_{cat}"
                 )
 
         # ── TASAS DE CRECIMIENTO ─────────────────────────────────
         with st.expander("📈 Tasas de crecimiento anuales", expanded=False):
             st.caption(TOOLTIPS["tasas_por_anio"])
-            anios = p["anios"]
             nuevas_tasas = []
             for i, tasa in enumerate(p["tasas_por_anio"]):
                 val = st.number_input(
                     f"Año {i+1} → Año {i+2}",
                     min_value=-0.5, max_value=0.5,
                     value=float(tasa), step=0.0001,
-                    format="%.4f", key=f"tasa_{i}"
+                    format="%.4f", key=f"{t}_tasa_{i}"
                 )
                 nuevas_tasas.append(val)
             p["tasas_por_anio"] = nuevas_tasas
@@ -176,17 +179,17 @@ def render_sidebar() -> dict:
             p["precio_galon"] = st.number_input(
                 "Precio galón (USD)", min_value=0.01,
                 value=float(p["precio_galon"]), step=0.05, format="%.2f",
-                help=TOOLTIPS["precio_galon"]
+                help=TOOLTIPS["precio_galon"], key=f"{t}_precio_galon"
             )
             p["rend_km_gal_troncal"] = st.number_input(
                 "Rendimiento troncal (km/gal)", min_value=0.1,
                 value=float(p["rend_km_gal_troncal"]), step=0.1, format="%.2f",
-                help=TOOLTIPS["rend_km_gal_troncal"]
+                help=TOOLTIPS["rend_km_gal_troncal"], key=f"{t}_rend_troncal"
             )
             p["rend_km_gal_alim"] = st.number_input(
                 "Rendimiento alimentación (km/gal)", min_value=0.1,
                 value=float(p["rend_km_gal_alim"]), step=0.1, format="%.2f",
-                help=TOOLTIPS["rend_km_gal_alim"]
+                help=TOOLTIPS["rend_km_gal_alim"], key=f"{t}_rend_alim"
             )
 
         # ── MANTENIMIENTO ────────────────────────────────────────
@@ -194,29 +197,30 @@ def render_sidebar() -> dict:
             p["costo_km_troncal"] = st.number_input(
                 "Costo/km troncal (USD)", min_value=0.01,
                 value=float(p["costo_km_troncal"]), step=0.01, format="%.2f",
-                help=TOOLTIPS["costo_km_troncal"]
+                help=TOOLTIPS["costo_km_troncal"], key=f"{t}_costo_km_troncal"
             )
             p["costo_km_alim"] = st.number_input(
                 "Costo/km alimentación (USD)", min_value=0.01,
                 value=float(p["costo_km_alim"]), step=0.01, format="%.2f",
-                help=TOOLTIPS["costo_km_alim"]
+                help=TOOLTIPS["costo_km_alim"], key=f"{t}_costo_km_alim"
             )
             p["costo_llanta"] = st.number_input(
                 "Costo por llanta (USD)", min_value=1.0,
-                value=float(p["costo_llanta"]), step=10.0, format="%.0f"
+                value=float(p["costo_llanta"]), step=10.0, format="%.0f",
+                key=f"{t}_costo_llanta"
             )
 
         # ── FLOTA ────────────────────────────────────────────────
         with st.expander("🚌 Flota", expanded=False):
             p["unidades_troncal"] = st.number_input(
-                "Buses troncal (18 m)", min_value=1,
+                "Buses troncal", min_value=1,
                 value=int(p["unidades_troncal"]), step=1,
-                help=TOOLTIPS["unidades_troncal"]
+                help=TOOLTIPS["unidades_troncal"], key=f"{t}_unidades_troncal"
             )
             p["unidades_alim"] = st.number_input(
                 "Buses alimentación (12 m)", min_value=1,
                 value=int(p["unidades_alim"]), step=1,
-                help=TOOLTIPS["unidades_alim"]
+                help=TOOLTIPS["unidades_alim"], key=f"{t}_unidades_alim"
             )
 
         # ── FINANCIAMIENTO ───────────────────────────────────────
@@ -225,18 +229,18 @@ def render_sidebar() -> dict:
                 "Tasa interés anual", min_value=0.001, max_value=0.5,
                 value=float(p["tasa_interes_anual"]),
                 step=0.001, format="%.4f",
-                help=TOOLTIPS["tasa_interes_anual"]
+                help=TOOLTIPS["tasa_interes_anual"], key=f"{t}_tasa_interes"
             )
             p["plazo_anios_financ"] = st.number_input(
                 "Plazo (años)", min_value=1, max_value=30,
                 value=int(p["plazo_anios_financ"]), step=1,
-                help=TOOLTIPS["plazo_anios_financ"]
+                help=TOOLTIPS["plazo_anios_financ"], key=f"{t}_plazo_financ"
             )
             p["porcentaje_financiado"] = st.slider(
                 "% Financiado con deuda", min_value=0.0, max_value=1.0,
                 value=float(p["porcentaje_financiado"]), step=0.05,
                 format="%.0f%%",
-                help=TOOLTIPS["porcentaje_financiado"]
+                help=TOOLTIPS["porcentaje_financiado"], key=f"{t}_pct_financiado"
             )
             p["porcentaje_equity"] = 1.0 - p["porcentaje_financiado"]
 
@@ -245,7 +249,7 @@ def render_sidebar() -> dict:
             p["salario_mensual"] = st.number_input(
                 "Salario mensual chofer (USD)", min_value=100.0,
                 value=float(p["salario_mensual"]), step=50.0, format="%.0f",
-                help=TOOLTIPS["salario_mensual"]
+                help=TOOLTIPS["salario_mensual"], key=f"{t}_salario"
             )
 
         # ── MACROECONOMÍA ────────────────────────────────────────
@@ -254,25 +258,25 @@ def render_sidebar() -> dict:
                 "Inflación anual", min_value=0.0, max_value=0.5,
                 value=float(p["inflacion_anual"]),
                 step=0.001, format="%.4f",
-                help=TOOLTIPS["inflacion_anual"]
+                help=TOOLTIPS["inflacion_anual"], key=f"{t}_inflacion"
             )
             p["tasa_descuento"] = st.number_input(
                 "Tasa de descuento (VAN)", min_value=0.001, max_value=0.5,
                 value=float(p["tasa_descuento"]),
                 step=0.005, format="%.3f",
-                help=TOOLTIPS["tasa_descuento"]
+                help=TOOLTIPS["tasa_descuento"], key=f"{t}_tasa_descuento"
             )
             p["itor_porcentaje_oper_recaudo"] = st.number_input(
                 "ITOR – % ingresos (recaudo)", min_value=0.0, max_value=0.5,
                 value=float(p["itor_porcentaje_oper_recaudo"]),
                 step=0.001, format="%.4f",
-                help=TOOLTIPS["itor_porcentaje_oper_recaudo"]
+                help=TOOLTIPS["itor_porcentaje_oper_recaudo"], key=f"{t}_itor_pct"
             )
             p["fee_metrovia_por_pasajero"] = st.number_input(
                 "Fee Metrovía (USD/pasajero)", min_value=0.0,
                 value=float(p["fee_metrovia_por_pasajero"]),
                 step=0.005, format="%.3f",
-                help=TOOLTIPS["fee_metrovia_por_pasajero"]
+                help=TOOLTIPS["fee_metrovia_por_pasajero"], key=f"{t}_fee_metrovia"
             )
 
         return p, troncal_sel
