@@ -420,13 +420,17 @@ def fig_flujo_acumulado(res: dict) -> go.Figure:
     """Área del flujo de caja acumulado."""
     cols  = res["cols_0aN"]
     acum  = np.cumsum(res["flujos_0aN"])
-    color_area = PALETA["verde"] if acum[-1] >= 0 else PALETA["rojo"]
+    if acum[-1] >= 0:
+        line_color = PALETA["verde"]
+        fill_color = "rgba(39, 174, 96, 0.15)"
+    else:
+        line_color = PALETA["rojo"]
+        fill_color = "rgba(231, 76, 60, 0.15)"
     fig = go.Figure(go.Scatter(
         x=cols, y=acum,
         fill="tozeroy",
-        line=dict(color=color_area, width=2.5),
-        fillcolor=color_area.replace(")", ", 0.15)").replace("rgb", "rgba")
-                  if color_area.startswith("rgb") else color_area + "26",
+        line=dict(color=line_color, width=2.5),
+        fillcolor=fill_color,
         hovertemplate="<b>%{x}</b><br>Acumulado: $%{y:,.0f}<extra></extra>",
         name="Flujo acumulado"
     ))
