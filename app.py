@@ -80,7 +80,7 @@ def fmt_pct(val: float) -> str:
     return f"{val * 100:.2f}%"
 
 
-def estilo_df(df: pd.DataFrame, entero: bool = False) -> pd.io.formats.style.Styler:
+def estilo_df(df: pd.DataFrame, entero: bool = False):
     """Aplica formato de moneda o entero a todas las columnas numéricas."""
     fmt = "{:,.0f}" if entero else "${:,.2f}"
     num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
