@@ -871,8 +871,11 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     return bytes(pdf.output())
 
 
+_PDF_VER = "2"   # incrementar cuando cambie el formato/texto del PDF
+
 @st.cache_data(show_spinner="Generando informe PDF…")
-def _gen_pdf_informe(troncales_frozen: str, precio_galon_sens: float) -> bytes:
+def _gen_pdf_informe(troncales_frozen: str, precio_galon_sens: float,
+                     _ver: str = _PDF_VER) -> bytes:
     """Genera el PDF del informe gerencial (cacheable por parametros)."""
     import json as _j, copy
     troncales = _j.loads(troncales_frozen)
