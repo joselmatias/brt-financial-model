@@ -634,10 +634,104 @@ def _txt_sens(precio_galon: float, van_actual: float,
     return (f"Con un precio del galon de combustible de ${precio_galon:.2f}, {vc} {bc}")
 
 
+def _matplotlib_charts(res: dict) -> list:
+    """Genera 4 gráficos con matplotlib (backend Agg) y retorna lista de BytesIO PNG."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as mticker
+    import io as _io
+
+    VERDE   = "#27AE60"
+    ROJO    = "#E74C3C"
+    AZUL_C  = "#2E86C1"
+    NARANJA = "#E67E22"
+    GDASH   = "#888888"
+
+    def _fmt_y(x, _):
+        if abs(x) >= 1_000_000:
+            return f"${x/1_000_000:.1f}M"
+        elif abs(x) >= 1_000:
+            return f"${x/1_000:.0f}k"
+        return f"${x:.0f}"
+
+    images = []
+
+    # 1. Ingresos vs Costos
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    cols = res["cols_anios"]
+    ax.plot(cols, res["serie_ingresos"], color=VERDE, linewidth=2.0,
+            marker="o", markersize=4, label="Ingresos totales")
+    ax.plot(cols, res["serie_costos"],   color=ROJO,  linewidth=2.0,
+            marker="o", markersize=4, label="Costos totales")
+    ax.set_title("Ingresos vs Costos totales", fontsize=11, fontweight="bold", pad=10)
+    ax.set_xlabel("Año", fontsize=9); ax.set_ylabel("USD", fontsize=9)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_fmt_y))
+    ax.legend(fontsize=8, loc="upper left")
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.tick_params(axis="x", rotation=45, labelsize=7)
+    ax.tick_params(axis="y", labelsize=7)
+    fig.tight_layout()
+    buf = _io.BytesIO(); fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
+    plt.close(fig); buf.seek(0); images.append(buf)
+
+    # 2. Flujo de Caja Anual
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    cols0 = res["cols_0aN"]; vals = res["flujos_0aN"]
+    colors = [VERDE if v >= 0 else ROJO for v in vals]
+    ax.bar(cols0, vals, color=colors, width=0.6)
+    ax.axhline(0, color=GDASH, linewidth=0.8, linestyle="--")
+    ax.set_title("Flujo de Caja Anual", fontsize=11, fontweight="bold", pad=10)
+    ax.set_xlabel("Año", fontsize=9); ax.set_ylabel("USD", fontsize=9)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_fmt_y))
+    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+    ax.tick_params(axis="x", rotation=45, labelsize=7)
+    ax.tick_params(axis="y", labelsize=7)
+    fig.tight_layout()
+    buf = _io.BytesIO(); fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
+    plt.close(fig); buf.seek(0); images.append(buf)
+
+    # 3. Flujo Acumulado
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    acum = np.cumsum(vals)
+    lc = VERDE if acum[-1] >= 0 else ROJO
+    x_idx = range(len(cols0))
+    ax.plot(list(x_idx), acum, color=lc, linewidth=2.0)
+    ax.fill_between(list(x_idx), acum, 0, color=lc, alpha=0.15)
+    ax.set_xticks(list(x_idx)); ax.set_xticklabels(cols0, rotation=45, fontsize=7)
+    ax.axhline(0, color=GDASH, linewidth=0.8, linestyle="--")
+    ax.set_title("Flujo de Caja Acumulado", fontsize=11, fontweight="bold", pad=10)
+    ax.set_xlabel("Año", fontsize=9); ax.set_ylabel("USD", fontsize=9)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_fmt_y))
+    ax.grid(True, linestyle="--", alpha=0.4)
+    ax.tick_params(axis="y", labelsize=7)
+    fig.tight_layout()
+    buf = _io.BytesIO(); fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
+    plt.close(fig); buf.seek(0); images.append(buf)
+
+    # 4. Composición de Costos
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    cols = res["cols_anios"]; x = list(range(len(cols)))
+    cv = res["serie_cv"]; cf = res["serie_cf"]
+    ax.bar(x, cv, color=NARANJA, label="Costos Variables", width=0.6)
+    ax.bar(x, cf, bottom=cv,    color=AZUL_C,  label="Costos Fijos",     width=0.6)
+    ax.set_xticks(x); ax.set_xticklabels(cols, rotation=45, fontsize=7)
+    ax.set_title("Composición de Costos", fontsize=11, fontweight="bold", pad=10)
+    ax.set_xlabel("Año", fontsize=9); ax.set_ylabel("USD", fontsize=9)
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(_fmt_y))
+    ax.legend(fontsize=8, loc="upper left")
+    ax.grid(True, axis="y", linestyle="--", alpha=0.4)
+    ax.tick_params(axis="y", labelsize=7)
+    fig.tight_layout()
+    buf = _io.BytesIO(); fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
+    plt.close(fig); buf.seek(0); images.append(buf)
+
+    return images
+
+
 def _build_pdf(res: dict, p: dict, sel_str: str,
                precio_galon_sens: float, van_actual_s: float,
-               tarifa_be: float, tarifa_base: float,
-               figs: list) -> bytes:
+               tarifa_be: float, tarifa_base: float) -> bytes:
     """Construye el PDF del informe gerencial (2 paginas) y retorna bytes."""
     from fpdf import FPDF
     import io as _io, datetime
@@ -764,26 +858,18 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     pdf.cell(190, 10, f"Graficos  |  Consolidado: {sel_str}", align="C")
     pdf.set_text_color(*NEGRO)
 
-    try:
-        import plotly.io as pio
-        chart_w, chart_h = 93, 63
-        grid  = [(8, 28), (108, 28), (8, 103), (108, 103)]
-        names = ["Ingresos vs Costos", "Flujo de Caja Anual",
-                 "Flujo Acumulado",    "Composicion de Costos"]
-        for fig, (x, y), nm in zip(figs, grid, names):
-            img = pio.to_image(fig, format="png", width=620, height=410, scale=1.5)
-            pdf.image(_io.BytesIO(img), x=x, y=y, w=chart_w, h=chart_h)
-            pdf.set_xy(x, y + chart_h + 0.5)
-            pdf.set_font("Helvetica", "I", 7.5)
-            pdf.set_text_color(90, 90, 90)
-            pdf.cell(chart_w, 4, nm, align="C")
-            pdf.set_text_color(*NEGRO)
-    except Exception as exc:
-        pdf.ln(30)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.multi_cell(0, 7,
-            f"Graficos no disponibles ({exc}). "
-            "Agregue 'kaleido' a requirements.txt para incluir imagenes.")
+    chart_w, chart_h = 93, 63
+    grid  = [(8, 28), (108, 28), (8, 103), (108, 103)]
+    names = ["Ingresos vs Costos", "Flujo de Caja Anual",
+             "Flujo Acumulado",    "Composicion de Costos"]
+    imgs = _matplotlib_charts(res)
+    for buf, (x, y), nm in zip(imgs, grid, names):
+        pdf.image(buf, x=x, y=y, w=chart_w, h=chart_h)
+        pdf.set_xy(x, y + chart_h + 0.5)
+        pdf.set_font("Helvetica", "I", 7.5)
+        pdf.set_text_color(90, 90, 90)
+        pdf.cell(chart_w, 4, nm, align="C")
+        pdf.set_text_color(*NEGRO)
 
     return bytes(pdf.output())
 
@@ -802,13 +888,7 @@ def _gen_pdf_informe(troncales_frozen: str, precio_galon_sens: float) -> bytes:
     va  = calcular_consolidado(pv)["van"]
     tbe = tarifa_general_van_cero(precio_galon_sens, troncales)
     sel = " + ".join(k.replace("Troncal ", "T") for k in troncales.keys())
-    figs_pdf = [
-        fig_ingresos_vs_costos(res_pdf),
-        fig_flujo_barras(res_pdf),
-        fig_flujo_acumulado(res_pdf),
-        fig_composicion_costos(res_pdf),
-    ]
-    return _build_pdf(res_pdf, p_pdf, sel, precio_galon_sens, va, tbe, tb, figs_pdf)
+    return _build_pdf(res_pdf, p_pdf, sel, precio_galon_sens, va, tbe, tb)
 
 
 # ─────────────────────────────────────────────
