@@ -1140,7 +1140,7 @@ def render_tab_exportar(res: dict, p: dict, troncal_sel: str):
     """)
 
     try:
-        excel_bytes = exportar_excel(res, nombre_troncal=troncal_sel)
+        excel_bytes = exportar_excel(res, nombre_troncal=troncal_sel, p=p)
         st.download_button(
             label="📥 Descargar Excel",
             data=excel_bytes,

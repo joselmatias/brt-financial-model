@@ -799,72 +799,256 @@ def tarifa_general_van_cero_troncal(precio_galon: float, params_troncal: dict,
 #  EXPORTACIÓN A EXCEL
 # ─────────────────────────────────────────────
 
-def exportar_excel(resultado: dict, nombre_troncal: str = "Troncal 1") -> bytes:
+def exportar_excel(resultado: dict, nombre_troncal: str = "Troncal 1",
+                   p: dict = None) -> bytes:
     """
-    Genera un archivo Excel multi-hoja con todos los resultados.
-    Retorna el contenido como bytes para descarga en Streamlit.
+    Genera un archivo Excel con:
+      - Hoja 1 "Flujo de Caja": todas las secciones financieras en formato vertical.
+      - Hoja 2 "Parámetros y Supuestos": supuestos del modelo (si se pasa p).
     """
     import io
+    from openpyxl import Workbook
     from openpyxl.utils import get_column_letter
-    from openpyxl.styles import Font, PatternFill, Alignment, numbers
+    from openpyxl.styles import Font, PatternFill, Alignment
 
-    hojas = {
-        "Demanda":              resultado["demanda"],
-        "Demanda_equivalente":  resultado["demanda_equivalente"],
-        "Ingresos":             resultado["ingresos"],
-        "Ing_equivalentes":     resultado["ingresos_equivalentes"],
-        "Costos_variables":     resultado["costos_variables_op"],
-        "ITOR":                 resultado["df_itor"],
-        "Fee_Metrovia":         resultado["df_fee"],
-        "Total_CV":             resultado["df_total_cv"],
-        "Costos_fijos":         resultado["costos_fijos"],
-        "Costos_totales":       resultado["df_costos_totales"],
-        "Utilidad":             resultado["df_utilidad_bruta"],
-        "Impuesto_Renta":       resultado["df_imp_renta"],
-        "Flujo_de_Caja":        resultado["df_flujo"],
-        "Flujo_Acumulado":      resultado["df_flujo_acum"],
-    }
-    hojas_enteras = {"Demanda", "Demanda_equivalente"}
+    AZUL   = "1F4E79"
+    AZUL_H = "2E86AB"
+    GRIS_T = "D6E4F0"
+    FMT_USD = "#,##0.00"
+    FMT_ENT = "#,##0"
+
+    wb = Workbook()
+
+    # Columnas de años: Año 0, Año 1, …, Año N
+    year_cols = [c for c in resultado["df_flujo"].columns if c.startswith("Año")]
+
+    # ── Helpers ──────────────────────────────────────────────────
+    def _title(ws, row, text, ncols):
+        if ncols > 1:
+            ws.merge_cells(start_row=row, start_column=1,
+                           end_row=row, end_column=ncols)
+        c = ws.cell(row=row, column=1, value=text)
+        c.font = Font(bold=True, color="FFFFFF", size=11)
+        c.fill = PatternFill("solid", fgColor=AZUL)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[row].height = 17
+        return row + 1
+
+    def _hdr(ws, row, labels):
+        for j, lbl in enumerate(labels, 1):
+            c = ws.cell(row=row, column=j, value=lbl)
+            c.font = Font(bold=True, color="FFFFFF", size=9)
+            c.fill = PatternFill("solid", fgColor=AZUL_H)
+            c.alignment = Alignment(
+                horizontal="center" if j > 1 else "left",
+                vertical="center", wrap_text=True)
+        ws.row_dimensions[row].height = 16
+        return row + 1
+
+    def _dat(ws, row, label, values, fmt=FMT_USD):
+        lbl = str(label)
+        is_tot = lbl.startswith("TOTAL") or lbl.startswith("SUBTOTAL")
+        fill = PatternFill("solid", fgColor=GRIS_T) if is_tot else None
+        c = ws.cell(row=row, column=1, value=lbl)
+        c.font = Font(bold=is_tot, size=9)
+        c.alignment = Alignment(horizontal="left")
+        if fill:
+            c.fill = fill
+        for j, v in enumerate(values, 2):
+            cell = ws.cell(row=row, column=j, value=v)
+            cell.number_format = fmt
+            cell.font = Font(bold=is_tot, size=9)
+            cell.alignment = Alignment(horizontal="right")
+            if fill:
+                cell.fill = fill
+        return row + 1
+
+    def _section(ws, row, title, df, fmt=FMT_USD):
+        ncols = 1 + len(year_cols)
+        row = _title(ws, row, title, ncols)
+        row = _hdr(ws, row, ["Rubro"] + year_cols)
+        for idx in df.index:
+            vals = [df.loc[idx, c] if c in df.columns else 0.0
+                    for c in year_cols]
+            row = _dat(ws, row, idx, vals, fmt=fmt)
+        return row + 1  # fila en blanco
+
+    # ── HOJA 1: Flujo de Caja ────────────────────────────────────
+    ws1 = wb.active
+    ws1.title = "Flujo de Caja"
+    row = 1
+
+    # 1. Pasaje por tipo
+    if p and "tarifas" in p:
+        row = _title(ws1, row, "PASAJE POR TIPO", 2)
+        row = _hdr(ws1, row, ["Tipo", "Tarifa (USD)"])
+        for tipo, tarifa in p["tarifas"].items():
+            ws1.cell(row=row, column=1, value=tipo).font = Font(size=9)
+            c = ws1.cell(row=row, column=2, value=float(tarifa))
+            c.number_format = FMT_USD
+            c.font = Font(size=9)
+            c.alignment = Alignment(horizontal="right")
+            row += 1
+        row += 1
+
+    # 2–13. Secciones financieras
+    row = _section(ws1, row, "DEMANDA",
+                   resultado["demanda"], fmt=FMT_ENT)
+    row = _section(ws1, row, "INGRESOS",
+                   resultado["ingresos"], fmt=FMT_USD)
+    row = _section(ws1, row, "COSTOS VARIABLES (operativos)",
+                   resultado["costos_variables_op"], fmt=FMT_USD)
+    row = _section(ws1, row, "OTROS COSTOS (ITOR)",
+                   resultado["df_itor"], fmt=FMT_USD)
+    row = _section(ws1, row, "FEE METROVÍA",
+                   resultado["df_fee"], fmt=FMT_USD)
+    row = _section(ws1, row, "TOTAL COSTOS VARIABLES",
+                   resultado["df_total_cv"], fmt=FMT_USD)
+    row = _section(ws1, row, "COSTOS FIJOS",
+                   resultado["costos_fijos"], fmt=FMT_USD)
+    row = _section(ws1, row, "COSTOS TOTALES",
+                   resultado["df_costos_totales"], fmt=FMT_USD)
+    row = _section(ws1, row, "UTILIDAD BRUTA",
+                   resultado["df_utilidad_bruta"], fmt=FMT_USD)
+    row = _section(ws1, row, "IMPUESTO A LA RENTA",
+                   resultado["df_imp_renta"], fmt=FMT_USD)
+    row = _section(ws1, row, "FLUJO DE CAJA",
+                   resultado["df_flujo"], fmt=FMT_USD)
+    row = _section(ws1, row, "FLUJO DE CAJA ACUMULADO",
+                   resultado["df_flujo_acum"], fmt=FMT_USD)
+
+    # 14. VAN y TIR
+    van  = resultado["van"]
+    tir  = resultado["tir"]
+    tasa = p["tasa_descuento"] if p else 0.12
+    pct  = int(round(tasa * 100))
+    row = _title(ws1, row, f"VAN y TIR ({pct}%)", 2)
+    row = _hdr(ws1, row, ["Indicador", "Valor"])
+    ws1.cell(row=row, column=1, value=f"VAN ({pct}%)").font = Font(size=9)
+    c = ws1.cell(row=row, column=2, value=van)
+    c.number_format = FMT_USD
+    c.alignment = Alignment(horizontal="right")
+    row += 1
+    ws1.cell(row=row, column=1, value="TIR").font = Font(size=9)
+    if not np.isnan(tir):
+        c = ws1.cell(row=row, column=2, value=tir)
+        c.number_format = "0.00%"
+        c.alignment = Alignment(horizontal="right")
+    else:
+        ws1.cell(row=row, column=2, value="N/A")
+    row += 1
+    ws1.cell(row=row, column=1, value="Payback").font = Font(size=9)
+    ws1.cell(row=row, column=2, value=resultado["payback"]).font = Font(size=9)
+
+    # Dimensiones hoja 1
+    ws1.column_dimensions["A"].width = 50
+    for j in range(2, 2 + len(year_cols)):
+        ws1.column_dimensions[get_column_letter(j)].width = 14
+    ws1.freeze_panes = "B3"
+
+    # ── HOJA 2: Parámetros y Supuestos ───────────────────────────
+    if p:
+        ws2 = wb.create_sheet("Parámetros y Supuestos")
+        r = 1
+
+        def _pt(ws, row, text):
+            ws.merge_cells(start_row=row, start_column=1,
+                           end_row=row, end_column=3)
+            c = ws.cell(row=row, column=1, value=text)
+            c.font  = Font(bold=True, color="FFFFFF", size=10)
+            c.fill  = PatternFill("solid", fgColor=AZUL)
+            c.alignment = Alignment(horizontal="left")
+            return row + 1
+
+        def _pr(ws, row, name, value, unit=""):
+            ws.cell(row=row, column=1, value=name).font = Font(size=9)
+            c = ws.cell(row=row, column=2, value=value)
+            c.font = Font(size=9)
+            c.alignment = Alignment(horizontal="right")
+            if isinstance(value, float):
+                c.number_format = "#,##0.00"
+            elif isinstance(value, int):
+                c.number_format = "#,##0"
+            ws.cell(row=row, column=3, value=unit).font = Font(
+                size=9, color="808080")
+            return row + 1
+
+        r = _pt(ws2, r, "TARIFAS (USD)")
+        for tipo, tarifa in p["tarifas"].items():
+            r = _pr(ws2, r, tipo, float(tarifa), "USD/pasajero")
+        r += 1
+
+        r = _pt(ws2, r, "DEMANDA BASE (AÑO 1)")
+        for cat, dem in p["base_demanda"].items():
+            r = _pr(ws2, r, cat, int(dem), "pasajeros/año")
+        r += 1
+
+        r = _pt(ws2, r, "TASAS DE CRECIMIENTO ANUAL")
+        for i, tasa_c in enumerate(p["tasas_por_anio"]):
+            r = _pr(ws2, r, f"Año {i+1} → Año {i+2}",
+                    float(round(tasa_c * 100, 4)), "%")
+        r += 1
+
+        r = _pt(ws2, r, "COMBUSTIBLE")
+        r = _pr(ws2, r, "Precio galón (USD)",
+                float(p["precio_galon"]), "USD/galón")
+        r = _pr(ws2, r, "Rendimiento troncal",
+                float(p["rend_km_gal_troncal"]), "km/galón")
+        r = _pr(ws2, r, "Rendimiento alimentación",
+                float(p["rend_km_gal_alim"]), "km/galón")
+        r += 1
+
+        r = _pt(ws2, r, "MANTENIMIENTO")
+        r = _pr(ws2, r, "Km totales troncal",
+                int(p["km_totales_troncal"]), "km/año")
+        r = _pr(ws2, r, "Km totales alimentación",
+                int(p["km_totales_alim_12y"]), "km/año")
+        r = _pr(ws2, r, "Costo/km troncal",
+                float(p["costo_km_troncal"]), "USD/km")
+        r = _pr(ws2, r, "Costo/km alimentación",
+                float(p["costo_km_alim"]), "USD/km")
+        r = _pr(ws2, r, "Costo por llanta",
+                float(p["costo_llanta"]), "USD")
+        r += 1
+
+        r = _pt(ws2, r, "FLOTA")
+        r = _pr(ws2, r, "Buses troncal (18 m)",
+                int(p["unidades_troncal"]), "unidades")
+        r = _pr(ws2, r, "Buses alimentación (12 m)",
+                int(p["unidades_alim"]), "unidades")
+        r += 1
+
+        r = _pt(ws2, r, "FINANCIAMIENTO")
+        r = _pr(ws2, r, "Tasa de interés anual",
+                float(p["tasa_interes_anual"] * 100), "%")
+        r = _pr(ws2, r, "Plazo",
+                int(p["plazo_anios_financ"]), "años")
+        r = _pr(ws2, r, "% Financiado con deuda",
+                float(p["porcentaje_financiado"] * 100), "%")
+        r = _pr(ws2, r, "% Equity (capital propio)",
+                float(p["porcentaje_equity"] * 100), "%")
+        r += 1
+
+        r = _pt(ws2, r, "SUELDOS")
+        r = _pr(ws2, r, "Salario mensual chofer",
+                float(p["salario_mensual"]), "USD/mes")
+        r += 1
+
+        r = _pt(ws2, r, "MACROECONOMÍA")
+        r = _pr(ws2, r, "Inflación anual",
+                float(p["inflacion_anual"] * 100), "%")
+        r = _pr(ws2, r, "Tasa de descuento (VAN)",
+                float(p["tasa_descuento"] * 100), "%")
+        r = _pr(ws2, r, "ITOR (% sobre ingresos recaudo)",
+                float(p["itor_porcentaje_oper_recaudo"] * 100), "%")
+        r = _pr(ws2, r, "Fee Metrovía",
+                float(p["fee_metrovia_por_pasajero"]), "USD/pasajero")
+
+        ws2.column_dimensions["A"].width = 44
+        ws2.column_dimensions["B"].width = 18
+        ws2.column_dimensions["C"].width = 16
 
     buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        for nombre, df in hojas.items():
-            df.to_excel(writer, sheet_name=nombre)
-            ws = writer.sheets[nombre]
-            fmt = "#,##0" if nombre in hojas_enteras else "#,##0.00"
-
-            # Encabezado
-            header_fill = PatternFill("solid", fgColor="1F4E79")
-            for cell in ws[1]:
-                cell.font      = Font(bold=True, color="FFFFFF")
-                cell.fill      = header_fill
-                cell.alignment = Alignment(horizontal="center")
-
-            # Formato de números
-            for row in ws.iter_rows(min_row=2, min_col=2,
-                                    max_row=ws.max_row, max_col=ws.max_column):
-                for cell in row:
-                    if isinstance(cell.value, (int, float)):
-                        cell.number_format = fmt
-
-            # Ancho de columnas
-            for j in range(1, ws.max_column + 1):
-                ws.column_dimensions[get_column_letter(j)].width = 16
-
-        # Hoja KPIs
-        van  = resultado["van"]
-        tir  = resultado["tir"]
-        kpis = pd.DataFrame({
-            "Indicador": ["Troncal", "VAN (12%)", "TIR", f"Flujo Año {resultado['df_flujo'].shape[1]-2}", "Payback"],
-            "Valor":     [
-                nombre_troncal,
-                f"${van:,.2f}",
-                "N/A" if np.isnan(tir) else f"{tir*100:.2f}%",
-                f"${resultado['flujo_ultimo']:,.2f}",
-                resultado["payback"],
-            ]
-        })
-        kpis.to_excel(writer, sheet_name="KPIs", index=False)
-
+    wb.save(buffer)
     buffer.seek(0)
     return buffer.read()
