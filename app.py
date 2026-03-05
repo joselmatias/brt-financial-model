@@ -10,7 +10,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 
-from funciones import calcular_modelo, calcular_consolidado, exportar_excel, tarifa_general_van_cero
+from funciones import (calcular_modelo, calcular_consolidado, exportar_excel,
+                       tarifa_general_van_cero, tarifa_general_van_cero_troncal)
 from parametros import TOOLTIPS, TRONCALES
 
 # ─────────────────────────────────────────────
@@ -549,8 +550,8 @@ def render_tabla(df: pd.DataFrame, entero: bool = False, titulo: str = ""):
 #  PESTAÑAS PRINCIPALES
 # ─────────────────────────────────────────────
 
-def render_tab_resumen(res: dict, p: dict):
-    """Tab: Resumen Ejecutivo con KPIs y todos los gráficos."""
+def render_tab_resumen(res: dict, p: dict, troncal_sel: str):
+    """Tab: Resumen Ejecutivo con KPIs, gráficos y análisis de sensibilidad."""
     render_kpis(res, p)
     st.divider()
     col1, col2 = st.columns(2)
@@ -564,22 +565,34 @@ def render_tab_resumen(res: dict, p: dict):
     # ── ANÁLISIS DE SENSIBILIDAD ──────────────────────────────────
     st.divider()
     st.subheader("🔎 Análisis de Sensibilidad")
+
+    es_consolidado = (troncal_sel == "Consolidado")
+    etiqueta_flujo = "el flujo consolidado (T1+T2+T3+T4)" if es_consolidado else f"el flujo de {troncal_sel}"
+
     st.caption(
-        "Modifica el **precio del galón de combustible** y calcula la **tarifa GENERAL** "
-        "mínima que hace VAN = 0 para el flujo consolidado (T1+T2+T3+T4), "
+        f"Modifica el **precio del galón de combustible** y calcula la **tarifa GENERAL** "
+        f"mínima que hace VAN = 0 para {etiqueta_flujo}, "
         "manteniendo todas las demás variables constantes."
     )
 
     @st.cache_data(show_spinner="Calculando sensibilidad…")
-    def _calc_sensibilidad(precio_galon: float) -> tuple:
+    def _sens_consolidado(precio_galon: float) -> tuple:
         import copy
-        # VAN consolidado con tarifa actual (0.45) y nuevo precio_galon
         params_van = copy.deepcopy(TRONCALES)
         for pt in params_van.values():
             pt["precio_galon"] = precio_galon
         van_actual = calcular_consolidado(params_van)["van"]
-        # Tarifa GENERAL que hace VAN = 0
-        tarifa_be = tarifa_general_van_cero(precio_galon, TRONCALES)
+        tarifa_be  = tarifa_general_van_cero(precio_galon, TRONCALES)
+        return van_actual, tarifa_be
+
+    @st.cache_data(show_spinner="Calculando sensibilidad…")
+    def _sens_troncal(precio_galon: float, p_frozen: str) -> tuple:
+        import json, copy
+        params = json.loads(p_frozen)
+        p_test = copy.deepcopy(params)
+        p_test["precio_galon"] = precio_galon
+        van_actual = calcular_modelo(p_test)["van"]
+        tarifa_be  = tarifa_general_van_cero_troncal(precio_galon, params)
         return van_actual, tarifa_be
 
     precio_galon_sens = st.number_input(
@@ -589,16 +602,26 @@ def render_tab_resumen(res: dict, p: dict):
         key="sens_precio_galon",
     )
 
-    van_actual, tarifa_be = _calc_sensibilidad(precio_galon_sens)
+    if es_consolidado:
+        van_actual, tarifa_be = _sens_consolidado(precio_galon_sens)
+        tarifa_base  = list(TRONCALES.values())[0]["tarifas"]["GENERAL"]
+        label_van    = "VAN Consolidado"
+        label_be_sub = "Break-even del consolidado"
+    else:
+        import json as _json
+        p_frozen    = _json.dumps(p, sort_keys=True, default=str)
+        van_actual, tarifa_be = _sens_troncal(precio_galon_sens, p_frozen)
+        tarifa_base  = p["tarifas"]["GENERAL"]
+        label_van    = f"VAN {troncal_sel}"
+        label_be_sub = f"Break-even de {troncal_sel}"
 
-    tarifa_base = 0.45
     c1, c2, c3 = st.columns(3)
 
     with c1:
         color_van = "#1a7a4a" if van_actual >= 0 else "#c0392b"
         st.markdown(f"""
         <div class="kpi-card">
-            <div class="kpi-label">VAN Consolidado<br>(tarifa actual ${tarifa_base:.2f})</div>
+            <div class="kpi-label">{label_van}<br>(tarifa actual ${tarifa_base:.2f})</div>
             <div class="kpi-value" style="color:{color_van};font-size:1.15rem">{fmt_usd(van_actual)}</div>
             <div class="kpi-sub">Con galón a ${precio_galon_sens:.2f}</div>
         </div>""", unsafe_allow_html=True)
@@ -612,36 +635,40 @@ def render_tab_resumen(res: dict, p: dict):
         <div class="kpi-card">
             <div class="kpi-label">Tarifa GENERAL<br>para VAN = 0</div>
             <div class="kpi-value" style="color:{color_be};font-size:1.4rem">{be_str}</div>
-            <div class="kpi-sub">Break-even del consolidado</div>
+            <div class="kpi-sub">{label_be_sub}</div>
         </div>""", unsafe_allow_html=True)
 
     with c3:
         if np.isnan(tarifa_be):
             delta_str, color_d = "N/A", "#6c757d"
         else:
-            delta = tarifa_be - tarifa_base
+            delta     = tarifa_be - tarifa_base
             delta_str = f"${delta:+.4f}"
-            color_d = "#1a7a4a" if delta <= 0 else "#c0392b"
+            color_d   = "#1a7a4a" if delta <= 0 else "#c0392b"
         st.markdown(f"""
         <div class="kpi-card">
             <div class="kpi-label">Diferencia vs<br>Tarifa Actual</div>
             <div class="kpi-value" style="color:{color_d};font-size:1.4rem">{delta_str}</div>
-            <div class="kpi-sub">Respecto a tarifa base $0.45</div>
+            <div class="kpi-sub">Respecto a tarifa base ${tarifa_base:.2f}</div>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("")  # espaciado
     if not np.isnan(tarifa_be):
         if tarifa_be <= tarifa_base:
-            st.success(
-                f"✅ Con galón a **${precio_galon_sens:.2f}**, la tarifa actual "
-                f"(**${tarifa_base:.2f}**) supera el break-even (**${tarifa_be:.4f}**). "
-                "El proyecto genera VAN positivo."
-            )
+            st.markdown(f"""
+<div style="background:#d4edda;border:1px solid #c3e6cb;border-radius:6px;
+            padding:0.75rem 1rem;color:#155724;font-size:0.95rem">
+✅ Con galón a <b>${precio_galon_sens:.2f}</b>, la tarifa actual
+(<b>${tarifa_base:.2f}</b>) supera el break-even (<b>${tarifa_be:.4f}</b>).
+El proyecto genera VAN positivo.
+</div>""", unsafe_allow_html=True)
         else:
-            st.warning(
-                f"⚠️ Con galón a **${precio_galon_sens:.2f}**, la tarifa debería subir "
-                f"de **${tarifa_base:.2f}** a **${tarifa_be:.4f}** para alcanzar VAN = 0."
-            )
+            st.markdown(f"""
+<div style="background:#fff3cd;border:1px solid #ffeeba;border-radius:6px;
+            padding:0.75rem 1rem;color:#856404;font-size:0.95rem">
+⚠️ Con galón a <b>${precio_galon_sens:.2f}</b>, la tarifa debería subir
+de <b>${tarifa_base:.2f}</b> a <b>${tarifa_be:.4f}</b> para alcanzar VAN = 0.
+</div>""", unsafe_allow_html=True)
 
 
 def render_tab_demanda(res: dict):
@@ -800,7 +827,7 @@ def main():
     ])
 
     with tab_res:
-        render_tab_resumen(resultado, p)
+        render_tab_resumen(resultado, p, troncal_sel)
     with tab_dem:
         render_tab_demanda(resultado)
     with tab_ing:

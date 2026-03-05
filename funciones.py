@@ -761,6 +761,40 @@ def tarifa_general_van_cero(precio_galon: float, troncales_params: dict,
     return (low + high) / 2.0
 
 
+def tarifa_general_van_cero_troncal(precio_galon: float, params_troncal: dict,
+                                      tol_usd: float = 1.0) -> float:
+    """
+    Bisección: encuentra la tarifa GENERAL que hace VAN = 0 para UNA troncal,
+    dado un precio_galon fijo. Devuelve np.nan si no hay cruce de cero.
+    """
+    import copy
+
+    def van_para(tarifa: float) -> float:
+        p = copy.deepcopy(params_troncal)
+        p["precio_galon"] = precio_galon
+        p["tarifas"]["GENERAL"] = tarifa
+        return calcular_modelo(p)["van"]
+
+    low, high = 0.01, 10.0
+    f_low, f_high = van_para(low), van_para(high)
+
+    if f_low * f_high > 0:
+        return np.nan
+
+    for _ in range(50):
+        mid = (low + high) / 2.0
+        f_mid = van_para(mid)
+        if abs(f_mid) < tol_usd:
+            return mid
+        if f_low * f_mid < 0:
+            high = mid
+            f_high = f_mid
+        else:
+            low = mid
+            f_low = f_mid
+    return (low + high) / 2.0
+
+
 # ─────────────────────────────────────────────
 #  EXPORTACIÓN A EXCEL
 # ─────────────────────────────────────────────
