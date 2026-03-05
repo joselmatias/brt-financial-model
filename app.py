@@ -547,6 +547,271 @@ def render_tabla(df: pd.DataFrame, entero: bool = False, titulo: str = ""):
 
 
 # ─────────────────────────────────────────────
+#  INFORME GERENCIAL – PDF
+# ─────────────────────────────────────────────
+
+def _txt_kpis(van: float, tir: float, tasa_desc: float,
+              payback: str, flujo_ultimo: float,
+              sel_str: str, anios: int) -> str:
+    """Parrafo de analisis financiero basado en KPIs (texto ASCII para PDF)."""
+    tir_s = "no calculada" if np.isnan(tir) else f"{tir*100:.2f}%"
+    viable = van > 0 and not np.isnan(tir) and tir > tasa_desc
+
+    if viable:
+        ap = (f"El consolidado {sel_str} presenta indicadores financieros solidos que respaldan "
+              "la viabilidad del proyecto bajo los supuestos actuales del modelo.")
+        vc = (f"El Valor Actual Neto de {fmt_usd(van)}, descontado al {tasa_desc*100:.1f}%, "
+              "confirma que el proyecto genera valor por encima del costo de oportunidad del capital.")
+        tc = (f"La TIR de {tir_s} supera la tasa de descuento, reforzando la rentabilidad "
+              "y la conveniencia de la inversion en infraestructura BRT.")
+    elif van > 0:
+        ap = (f"El consolidado {sel_str} genera valor positivo, aunque con retorno "
+              "por debajo del umbral de referencia establecido.")
+        vc = (f"El VAN positivo de {fmt_usd(van)} indica recuperacion de la inversion a valor "
+              f"presente; sin embargo, la TIR de {tir_s} no supera la tasa de descuento del "
+              f"{tasa_desc*100:.1f}%.")
+        tc = ("Se recomienda revisar la estructura de costos operativos y la politica tarifaria "
+              "para fortalecer la rentabilidad del sistema.")
+    else:
+        ap = (f"El consolidado {sel_str} no alcanza los indicadores minimos de viabilidad "
+              "financiera bajo los supuestos actuales del modelo.")
+        vc = (f"El VAN negativo de {fmt_usd(van)} senala que el proyecto no recupera el costo "
+              f"de oportunidad del capital a la tasa de descuento del {tasa_desc*100:.1f}%.")
+        tc = (f"Con una TIR de {tir_s}, se requieren ajustes estructurales en tarifas, "
+              "demanda proyectada o estructura de financiamiento para alcanzar la viabilidad.")
+
+    if payback == "No recupera":
+        pc = (f"La inversion inicial no se recupera dentro del horizonte de {anios} anos, "
+              "lo que representa un riesgo relevante que debe ser ponderado por los inversionistas.")
+    else:
+        pc = (f"La inversion inicial se recupera en {payback}, dentro del horizonte de "
+              f"{anios} anos analizado, lo cual es positivo para la gestion del riesgo financiero.")
+
+    fy = (f"El flujo de caja del ultimo anio del horizonte ({fmt_usd(flujo_ultimo)}) es "
+          + ("positivo, reflejando sostenibilidad operativa al cierre del periodo analizado."
+             if flujo_ultimo > 0
+             else "negativo, evidenciando presion financiera en los periodos finales del proyecto."))
+
+    return f"{ap} {vc} {tc} {pc} {fy}"
+
+
+def _txt_sens(precio_galon: float, van_actual: float,
+              tarifa_be: float, tarifa_base: float, sel_str: str) -> str:
+    """Parrafo de analisis de sensibilidad (texto ASCII para PDF)."""
+    if np.isnan(tarifa_be):
+        return (f"Con un precio del galon de combustible de ${precio_galon:.2f}, el analisis "
+                f"no pudo determinar una tarifa de equilibrio para {sel_str} en el rango "
+                "evaluado, lo que puede indicar una estructura de costos con alta presion "
+                "financiera que requiere revision integral del modelo.")
+
+    delta = tarifa_be - tarifa_base
+
+    if van_actual >= 0:
+        vc = (f"a la tarifa GENERAL vigente de ${tarifa_base:.2f}, el VAN consolidado es "
+              f"positivo ({fmt_usd(van_actual)}), confirmando viabilidad bajo este precio "
+              "de combustible.")
+    else:
+        vc = (f"a la tarifa GENERAL vigente de ${tarifa_base:.2f}, el VAN consolidado es "
+              f"negativo ({fmt_usd(van_actual)}), indicando que el costo del combustible "
+              "compromete la viabilidad del proyecto.")
+
+    if tarifa_be <= tarifa_base:
+        pct = abs(delta) / tarifa_base * 100
+        bc = (f"La tarifa de equilibrio calculada es ${tarifa_be:.4f}, es decir ${abs(delta):.4f} "
+              f"({pct:.1f}%) por debajo de la tarifa actual. Este margen de seguridad refleja "
+              "que el proyecto puede absorber incrementos en el precio del combustible sin "
+              "necesidad de un ajuste tarifario inmediato, brindando estabilidad financiera "
+              "y predictibilidad en la planificacion operativa.")
+    else:
+        pct = abs(delta) / tarifa_base * 100
+        bc = (f"Para alcanzar el punto de equilibrio (VAN = 0) seria necesario incrementar "
+              f"la tarifa de ${tarifa_base:.2f} a ${tarifa_be:.4f} por pasajero (alza de "
+              f"${abs(delta):.4f}, equivalente a +{pct:.1f}%). Se recomienda evaluar la "
+              "viabilidad regulatoria, politica y social de dicho incremento, asi como "
+              "explorar alternativas de reduccion de costos operativos o renegociacion de "
+              "condiciones de financiamiento.")
+
+    return (f"Con un precio del galon de combustible de ${precio_galon:.2f}, {vc} {bc}")
+
+
+def _build_pdf(res: dict, p: dict, sel_str: str,
+               precio_galon_sens: float, van_actual_s: float,
+               tarifa_be: float, tarifa_base: float,
+               figs: list) -> bytes:
+    """Construye el PDF del informe gerencial (2 paginas) y retorna bytes."""
+    from fpdf import FPDF
+    import io as _io, datetime
+
+    van     = res["van"]
+    tir     = res["tir"]
+    payback = res["payback"]
+    flujo_u = res["flujo_ultimo"]
+    tasa    = p["tasa_descuento"]
+    anios   = p["anios"]
+
+    tir_s = "N/A" if np.isnan(tir) else f"{tir*100:.2f}%"
+    if np.isnan(tir):
+        viab = "No viable (TIR indefinida)"
+    elif van > 0 and tir > tasa:
+        viab = "VIABLE"
+    elif van > 0 or tir > tasa:
+        viab = "Viable con reservas"
+    else:
+        viab = "No viable"
+
+    txt1 = _txt_kpis(van, tir, tasa, payback, flujo_u, sel_str, anios)
+    txt2 = _txt_sens(precio_galon_sens, van_actual_s, tarifa_be, tarifa_base, sel_str)
+
+    AZUL   = (31, 78, 121)
+    BLANCO = (255, 255, 255)
+    NEGRO  = (30, 30, 30)
+    GRIS_C = (240, 247, 255)
+
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.set_margins(10, 10, 10)
+
+    # ── PAGINA 1 ───────────────────────────────────────────────────
+    pdf.add_page()
+
+    # Banner
+    pdf.set_fill_color(*AZUL)
+    pdf.rect(0, 0, 210, 38, "F")
+    pdf.set_text_color(*BLANCO)
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_xy(10, 6)
+    pdf.cell(190, 10, "Informe Gerencial  -  Flujo de Caja BRT", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_xy(10, 20)
+    pdf.cell(190, 8, f"Consolidado: {sel_str}  |  Horizonte: {anios} anos", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_xy(10, 30)
+    pdf.cell(190, 6, f"Generado: {datetime.date.today().strftime('%d/%m/%Y')}", align="C")
+    pdf.set_text_color(*NEGRO)
+    pdf.ln(20)
+
+    # Seccion 1: KPIs
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(*AZUL)
+    pdf.cell(0, 8, "1. Indicadores Financieros Clave", ln=True)
+    pdf.set_draw_color(*AZUL)
+    pdf.set_line_width(0.4)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(3)
+    pdf.set_text_color(*NEGRO)
+
+    ca, cb = 80, 110
+    for i, (lab, val) in enumerate([
+        ("Viabilidad del Proyecto",            viab),
+        (f"VAN  (tasa {tasa*100:.1f}%)",       fmt_usd(van)),
+        ("TIR",                                tir_s),
+        (f"Flujo de Caja - Ano {anios}",       fmt_usd(flujo_u)),
+        ("Periodo de Recuperacion (Payback)",  payback),
+    ]):
+        pdf.set_fill_color(*(GRIS_C if i % 2 == 0 else BLANCO))
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(ca, 8, lab, border=1, fill=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(cb, 8, val, border=1, fill=True, ln=True)
+
+    pdf.ln(5)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(*AZUL)
+    pdf.cell(0, 6, "Analisis Financiero:", ln=True)
+    pdf.set_text_color(*NEGRO)
+    pdf.set_font("Helvetica", "", 9.5)
+    pdf.multi_cell(0, 5.5, txt1)
+    pdf.ln(8)
+
+    # Seccion 2: Sensibilidad
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(*AZUL)
+    pdf.cell(0, 8, "2. Analisis de Sensibilidad  -  Precio del Combustible", ln=True)
+    pdf.set_draw_color(*AZUL)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(3)
+    pdf.set_text_color(*NEGRO)
+
+    tbe_s = "N/A" if np.isnan(tarifa_be) else f"${tarifa_be:.4f}"
+    dlt_s = "N/A" if np.isnan(tarifa_be) else f"${tarifa_be - tarifa_base:+.4f}"
+    for i, (lab, val) in enumerate([
+        ("Precio galon de combustible",              f"${precio_galon_sens:.2f}"),
+        (f"VAN consolidado (tarifa ${tarifa_base:.2f})", fmt_usd(van_actual_s)),
+        ("Tarifa GENERAL para VAN = 0",              tbe_s),
+        ("Diferencia vs tarifa actual",              dlt_s),
+    ]):
+        pdf.set_fill_color(*(GRIS_C if i % 2 == 0 else BLANCO))
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(ca, 8, lab, border=1, fill=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(cb, 8, val, border=1, fill=True, ln=True)
+
+    pdf.ln(5)
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_text_color(*AZUL)
+    pdf.cell(0, 6, "Analisis de Sensibilidad:", ln=True)
+    pdf.set_text_color(*NEGRO)
+    pdf.set_font("Helvetica", "", 9.5)
+    pdf.multi_cell(0, 5.5, txt2)
+
+    # ── PAGINA 2: Graficos ─────────────────────────────────────────
+    pdf.add_page()
+    pdf.set_fill_color(*AZUL)
+    pdf.rect(0, 0, 210, 22, "F")
+    pdf.set_xy(10, 6)
+    pdf.set_text_color(*BLANCO)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(190, 10, f"Graficos  |  Consolidado: {sel_str}", align="C")
+    pdf.set_text_color(*NEGRO)
+
+    try:
+        import plotly.io as pio
+        chart_w, chart_h = 93, 63
+        grid  = [(8, 28), (108, 28), (8, 103), (108, 103)]
+        names = ["Ingresos vs Costos", "Flujo de Caja Anual",
+                 "Flujo Acumulado",    "Composicion de Costos"]
+        for fig, (x, y), nm in zip(figs, grid, names):
+            img = pio.to_image(fig, format="png", width=620, height=410, scale=1.5)
+            pdf.image(_io.BytesIO(img), x=x, y=y, w=chart_w, h=chart_h)
+            pdf.set_xy(x, y + chart_h + 0.5)
+            pdf.set_font("Helvetica", "I", 7.5)
+            pdf.set_text_color(90, 90, 90)
+            pdf.cell(chart_w, 4, nm, align="C")
+            pdf.set_text_color(*NEGRO)
+    except Exception as exc:
+        pdf.ln(30)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 7,
+            f"Graficos no disponibles ({exc}). "
+            "Agregue 'kaleido' a requirements.txt para incluir imagenes.")
+
+    return bytes(pdf.output())
+
+
+@st.cache_data(show_spinner="Generando informe PDF…")
+def _gen_pdf_informe(troncales_frozen: str, precio_galon_sens: float) -> bytes:
+    """Genera el PDF del informe gerencial (cacheable por parametros)."""
+    import json as _j, copy
+    troncales = _j.loads(troncales_frozen)
+    res_pdf   = calcular_consolidado(troncales)
+    p_pdf     = list(troncales.values())[0]
+    tb        = p_pdf["tarifas"]["GENERAL"]
+    pv        = copy.deepcopy(troncales)
+    for pt in pv.values():
+        pt["precio_galon"] = precio_galon_sens
+    va  = calcular_consolidado(pv)["van"]
+    tbe = tarifa_general_van_cero(precio_galon_sens, troncales)
+    sel = " + ".join(k.replace("Troncal ", "T") for k in troncales.keys())
+    figs_pdf = [
+        fig_ingresos_vs_costos(res_pdf),
+        fig_flujo_barras(res_pdf),
+        fig_flujo_acumulado(res_pdf),
+        fig_composicion_costos(res_pdf),
+    ]
+    return _build_pdf(res_pdf, p_pdf, sel, precio_galon_sens, va, tbe, tb, figs_pdf)
+
+
+# ─────────────────────────────────────────────
 #  PESTAÑAS PRINCIPALES
 # ─────────────────────────────────────────────
 
@@ -704,6 +969,31 @@ El proyecto genera VAN positivo.
 ⚠️ Con galón a <b>${precio_galon_sens:.2f}</b>, la tarifa debería subir
 de <b>${tarifa_base:.2f}</b> a <b>${tarifa_be:.4f}</b> para alcanzar VAN = 0.
 </div>""", unsafe_allow_html=True)
+
+    # ── INFORME GERENCIAL ─────────────────────────────────────────
+    if es_consolidado:
+        st.divider()
+        st.subheader("📄 Informe Gerencial")
+        st.caption(
+            "Genera un informe ejecutivo en PDF con indicadores financieros, "
+            "análisis experto y gráficos del consolidado seleccionado. "
+            "La primera página incluye el análisis y la segunda los gráficos."
+        )
+        with st.spinner("Preparando informe PDF…"):
+            pdf_bytes = _gen_pdf_informe(troncales_frozen, precio_galon_sens)
+        fname = (
+            "Informe_BRT_"
+            + seleccion_str.replace(" + ", "-").replace(" ", "")
+            + ".pdf"
+        )
+        st.download_button(
+            label="📥 Descargar Informe Gerencial (PDF)",
+            data=pdf_bytes,
+            file_name=fname,
+            mime="application/pdf",
+            type="primary",
+            use_container_width=True,
+        )
 
 
 def render_tab_demanda(res: dict):
