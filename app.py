@@ -558,39 +558,39 @@ def _txt_kpis(van: float, tir: float, tasa_desc: float,
     viable = van > 0 and not np.isnan(tir) and tir > tasa_desc
 
     if viable:
-        ap = (f"El consolidado {sel_str} presenta indicadores financieros solidos que respaldan "
+        ap = (f"El consolidado {sel_str} presenta indicadores financieros sólidos que respaldan "
               "la viabilidad del proyecto bajo los supuestos actuales del modelo.")
         vc = (f"El Valor Actual Neto de {fmt_usd(van)}, descontado al {tasa_desc*100:.1f}%, "
               "confirma que el proyecto genera valor por encima del costo de oportunidad del capital.")
         tc = (f"La TIR de {tir_s} supera la tasa de descuento, reforzando la rentabilidad "
-              "y la conveniencia de la inversion en infraestructura BRT.")
+              "y la conveniencia de la inversión en infraestructura BRT.")
     elif van > 0:
         ap = (f"El consolidado {sel_str} genera valor positivo, aunque con retorno "
               "por debajo del umbral de referencia establecido.")
-        vc = (f"El VAN positivo de {fmt_usd(van)} indica recuperacion de la inversion a valor "
+        vc = (f"El VAN positivo de {fmt_usd(van)} indica recuperación de la inversión a valor "
               f"presente; sin embargo, la TIR de {tir_s} no supera la tasa de descuento del "
               f"{tasa_desc*100:.1f}%.")
-        tc = ("Se recomienda revisar la estructura de costos operativos y la politica tarifaria "
+        tc = ("Se recomienda revisar la estructura de costos operativos y la política tarifaria "
               "para fortalecer la rentabilidad del sistema.")
     else:
-        ap = (f"El consolidado {sel_str} no alcanza los indicadores minimos de viabilidad "
+        ap = (f"El consolidado {sel_str} no alcanza los indicadores mínimos de viabilidad "
               "financiera bajo los supuestos actuales del modelo.")
-        vc = (f"El VAN negativo de {fmt_usd(van)} senala que el proyecto no recupera el costo "
+        vc = (f"El VAN negativo de {fmt_usd(van)} señala que el proyecto no recupera el costo "
               f"de oportunidad del capital a la tasa de descuento del {tasa_desc*100:.1f}%.")
         tc = (f"Con una TIR de {tir_s}, se requieren ajustes estructurales en tarifas, "
               "demanda proyectada o estructura de financiamiento para alcanzar la viabilidad.")
 
     if payback == "No recupera":
-        pc = (f"La inversion inicial no se recupera dentro del horizonte de {anios} anos, "
+        pc = (f"La inversión inicial no se recupera dentro del horizonte de {anios} años, "
               "lo que representa un riesgo relevante que debe ser ponderado por los inversionistas.")
     else:
-        pc = (f"La inversion inicial se recupera en {payback}, dentro del horizonte de "
-              f"{anios} anos analizado, lo cual es positivo para la gestion del riesgo financiero.")
+        pc = (f"La inversión inicial se recupera en {payback}, dentro del horizonte de "
+              f"{anios} años analizado, lo cual es positivo para la gestión del riesgo financiero.")
 
-    fy = (f"El flujo de caja del ultimo anio del horizonte ({fmt_usd(flujo_ultimo)}) es "
-          + ("positivo, reflejando sostenibilidad operativa al cierre del periodo analizado."
+    fy = (f"El flujo de caja del último año del horizonte ({fmt_usd(flujo_ultimo)}) es "
+          + ("positivo, reflejando sostenibilidad operativa al cierre del período analizado."
              if flujo_ultimo > 0
-             else "negativo, evidenciando presion financiera en los periodos finales del proyecto."))
+             else "negativo, evidenciando presión financiera en los períodos finales del proyecto."))
 
     return f"{ap} {vc} {tc} {pc} {fy}"
 
@@ -599,10 +599,10 @@ def _txt_sens(precio_galon: float, van_actual: float,
               tarifa_be: float, tarifa_base: float, sel_str: str) -> str:
     """Parrafo de analisis de sensibilidad (texto ASCII para PDF)."""
     if np.isnan(tarifa_be):
-        return (f"Con un precio del galon de combustible de ${precio_galon:.2f}, el analisis "
+        return (f"Con un precio del galón de combustible de ${precio_galon:.2f}, el análisis "
                 f"no pudo determinar una tarifa de equilibrio para {sel_str} en el rango "
-                "evaluado, lo que puede indicar una estructura de costos con alta presion "
-                "financiera que requiere revision integral del modelo.")
+                "evaluado, lo que puede indicar una estructura de costos con alta presión "
+                "financiera que requiere revisión integral del modelo.")
 
     delta = tarifa_be - tarifa_base
 
@@ -621,17 +621,14 @@ def _txt_sens(precio_galon: float, van_actual: float,
               f"({pct:.1f}%) por debajo de la tarifa actual. Este margen de seguridad refleja "
               "que el proyecto puede absorber incrementos en el precio del combustible sin "
               "necesidad de un ajuste tarifario inmediato, brindando estabilidad financiera "
-              "y predictibilidad en la planificacion operativa.")
+              "y predictibilidad en la planificación operativa.")
     else:
         pct = abs(delta) / tarifa_base * 100
-        bc = (f"Para alcanzar el punto de equilibrio (VAN = 0) seria necesario incrementar "
-              f"la tarifa de ${tarifa_base:.2f} a ${tarifa_be:.4f} por pasajero (alza de "
-              f"${abs(delta):.4f}, equivalente a +{pct:.1f}%). Se recomienda evaluar la "
-              "viabilidad regulatoria, politica y social de dicho incremento, asi como "
-              "explorar alternativas de reduccion de costos operativos o renegociacion de "
-              "condiciones de financiamiento.")
+        bc = (f"Para alcanzar el punto de equilibrio (VAN = 0) sería necesario incrementar "
+              f"la tarifa de ${tarifa_base:.2f} a ${tarifa_be:.4f} por pasajero "
+              f"(alza de ${abs(delta):.4f}, equivalente a +{pct:.1f}%).")
 
-    return (f"Con un precio del galon de combustible de ${precio_galon:.2f}, {vc} {bc}")
+    return (f"Con un precio del galón de combustible de ${precio_galon:.2f}, {vc} {bc}")
 
 
 def _matplotlib_charts(res: dict) -> list:
@@ -777,7 +774,7 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     pdf.cell(190, 10, "Informe Gerencial  -  Flujo de Caja BRT", align="C", ln=True)
     pdf.set_font("Helvetica", "", 11)
     pdf.set_xy(10, 20)
-    pdf.cell(190, 8, f"Consolidado: {sel_str}  |  Horizonte: {anios} anos", align="C", ln=True)
+    pdf.cell(190, 8, f"Consolidado: {sel_str}  |  Horizonte: {anios} años", align="C", ln=True)
     pdf.set_font("Helvetica", "", 9)
     pdf.set_xy(10, 30)
     pdf.cell(190, 6, f"Generado: {datetime.date.today().strftime('%d/%m/%Y')}", align="C")
@@ -799,8 +796,8 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
         ("Viabilidad del Proyecto",            viab),
         (f"VAN  (tasa {tasa*100:.1f}%)",       fmt_usd(van)),
         ("TIR",                                tir_s),
-        (f"Flujo de Caja - Ano {anios}",       fmt_usd(flujo_u)),
-        ("Periodo de Recuperacion (Payback)",  payback),
+        (f"Flujo de Caja - Año {anios}",        fmt_usd(flujo_u)),
+        ("Período de Recuperación (Payback)",  payback),
     ]):
         pdf.set_fill_color(*(GRIS_C if i % 2 == 0 else BLANCO))
         pdf.set_font("Helvetica", "B", 10)
@@ -811,7 +808,7 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(*AZUL)
-    pdf.cell(0, 6, "Analisis Financiero:", ln=True)
+    pdf.cell(0, 6, "Análisis Financiero:", ln=True)
     pdf.set_text_color(*NEGRO)
     pdf.set_font("Helvetica", "", 9.5)
     pdf.multi_cell(0, 5.5, txt1)
@@ -820,7 +817,7 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     # Seccion 2: Sensibilidad
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(*AZUL)
-    pdf.cell(0, 8, "2. Analisis de Sensibilidad  -  Precio del Combustible", ln=True)
+    pdf.cell(0, 8, "2. Análisis de Sensibilidad  -  Precio del Combustible", ln=True)
     pdf.set_draw_color(*AZUL)
     pdf.line(10, pdf.get_y(), 200, pdf.get_y())
     pdf.ln(3)
@@ -829,7 +826,7 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     tbe_s = "N/A" if np.isnan(tarifa_be) else f"${tarifa_be:.4f}"
     dlt_s = "N/A" if np.isnan(tarifa_be) else f"${tarifa_be - tarifa_base:+.4f}"
     for i, (lab, val) in enumerate([
-        ("Precio galon de combustible",              f"${precio_galon_sens:.2f}"),
+        ("Precio galón de combustible",              f"${precio_galon_sens:.2f}"),
         (f"VAN consolidado (tarifa ${tarifa_base:.2f})", fmt_usd(van_actual_s)),
         ("Tarifa GENERAL para VAN = 0",              tbe_s),
         ("Diferencia vs tarifa actual",              dlt_s),
@@ -843,7 +840,7 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     pdf.ln(5)
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(*AZUL)
-    pdf.cell(0, 6, "Analisis de Sensibilidad:", ln=True)
+    pdf.cell(0, 6, "Análisis de Sensibilidad:", ln=True)
     pdf.set_text_color(*NEGRO)
     pdf.set_font("Helvetica", "", 9.5)
     pdf.multi_cell(0, 5.5, txt2)
@@ -855,7 +852,7 @@ def _build_pdf(res: dict, p: dict, sel_str: str,
     pdf.set_xy(10, 6)
     pdf.set_text_color(*BLANCO)
     pdf.set_font("Helvetica", "B", 13)
-    pdf.cell(190, 10, f"Graficos  |  Consolidado: {sel_str}", align="C")
+    pdf.cell(190, 10, f"Gráficos  |  Consolidado: {sel_str}", align="C")
     pdf.set_text_color(*NEGRO)
 
     chart_w, chart_h = 93, 63
