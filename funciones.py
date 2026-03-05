@@ -722,6 +722,46 @@ def calcular_consolidado(troncales_params: dict) -> dict:
 
 
 # ─────────────────────────────────────────────
+#  ANÁLISIS DE SENSIBILIDAD
+# ─────────────────────────────────────────────
+
+def tarifa_general_van_cero(precio_galon: float, troncales_params: dict,
+                              tol_usd: float = 1.0) -> float:
+    """
+    Bisección: encuentra la tarifa GENERAL (aplicada a todas las troncales)
+    que hace VAN consolidado = 0, dado un precio_galon fijo.
+    Devuelve np.nan si no existe cruce de cero en el rango [0.01, 10.0].
+    """
+    import copy
+
+    def van_para(tarifa: float) -> float:
+        params = copy.deepcopy(troncales_params)
+        for p in params.values():
+            p["precio_galon"] = precio_galon
+            p["tarifas"]["GENERAL"] = tarifa
+        return calcular_consolidado(params)["van"]
+
+    low, high = 0.01, 10.0
+    f_low, f_high = van_para(low), van_para(high)
+
+    if f_low * f_high > 0:
+        return np.nan  # No hay cruce de cero en el rango
+
+    for _ in range(50):
+        mid = (low + high) / 2.0
+        f_mid = van_para(mid)
+        if abs(f_mid) < tol_usd:
+            return mid
+        if f_low * f_mid < 0:
+            high = mid
+            f_high = f_mid
+        else:
+            low = mid
+            f_low = f_mid
+    return (low + high) / 2.0
+
+
+# ─────────────────────────────────────────────
 #  EXPORTACIÓN A EXCEL
 # ─────────────────────────────────────────────
 

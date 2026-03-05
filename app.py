@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import streamlit as st
 
-from funciones import calcular_modelo, calcular_consolidado, exportar_excel
+from funciones import calcular_modelo, calcular_consolidado, exportar_excel, tarifa_general_van_cero
 from parametros import TOOLTIPS, TRONCALES
 
 # ─────────────────────────────────────────────
@@ -560,6 +560,88 @@ def render_tab_resumen(res: dict, p: dict):
     with col2:
         st.plotly_chart(fig_flujo_barras(res),        use_container_width=True)
         st.plotly_chart(fig_composicion_costos(res),  use_container_width=True)
+
+    # ── ANÁLISIS DE SENSIBILIDAD ──────────────────────────────────
+    st.divider()
+    st.subheader("🔎 Análisis de Sensibilidad")
+    st.caption(
+        "Modifica el **precio del galón de combustible** y calcula la **tarifa GENERAL** "
+        "mínima que hace VAN = 0 para el flujo consolidado (T1+T2+T3+T4), "
+        "manteniendo todas las demás variables constantes."
+    )
+
+    @st.cache_data(show_spinner="Calculando sensibilidad…")
+    def _calc_sensibilidad(precio_galon: float) -> tuple:
+        import copy
+        # VAN consolidado con tarifa actual (0.45) y nuevo precio_galon
+        params_van = copy.deepcopy(TRONCALES)
+        for pt in params_van.values():
+            pt["precio_galon"] = precio_galon
+        van_actual = calcular_consolidado(params_van)["van"]
+        # Tarifa GENERAL que hace VAN = 0
+        tarifa_be = tarifa_general_van_cero(precio_galon, TRONCALES)
+        return van_actual, tarifa_be
+
+    precio_galon_sens = st.number_input(
+        "Precio del galón de combustible (USD)",
+        min_value=0.50, max_value=10.0,
+        value=2.80, step=0.05, format="%.2f",
+        key="sens_precio_galon",
+    )
+
+    van_actual, tarifa_be = _calc_sensibilidad(precio_galon_sens)
+
+    tarifa_base = 0.45
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        color_van = "#1a7a4a" if van_actual >= 0 else "#c0392b"
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">VAN Consolidado<br>(tarifa actual ${tarifa_base:.2f})</div>
+            <div class="kpi-value" style="color:{color_van};font-size:1.15rem">{fmt_usd(van_actual)}</div>
+            <div class="kpi-sub">Con galón a ${precio_galon_sens:.2f}</div>
+        </div>""", unsafe_allow_html=True)
+
+    with c2:
+        if np.isnan(tarifa_be):
+            be_str, color_be = "N/A", "#c0392b"
+        else:
+            be_str, color_be = f"${tarifa_be:.4f}", "#1F4E79"
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Tarifa GENERAL<br>para VAN = 0</div>
+            <div class="kpi-value" style="color:{color_be};font-size:1.4rem">{be_str}</div>
+            <div class="kpi-sub">Break-even del consolidado</div>
+        </div>""", unsafe_allow_html=True)
+
+    with c3:
+        if np.isnan(tarifa_be):
+            delta_str, color_d = "N/A", "#6c757d"
+        else:
+            delta = tarifa_be - tarifa_base
+            delta_str = f"${delta:+.4f}"
+            color_d = "#1a7a4a" if delta <= 0 else "#c0392b"
+        st.markdown(f"""
+        <div class="kpi-card">
+            <div class="kpi-label">Diferencia vs<br>Tarifa Actual</div>
+            <div class="kpi-value" style="color:{color_d};font-size:1.4rem">{delta_str}</div>
+            <div class="kpi-sub">Respecto a tarifa base $0.45</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("")  # espaciado
+    if not np.isnan(tarifa_be):
+        if tarifa_be <= tarifa_base:
+            st.success(
+                f"✅ Con galón a **${precio_galon_sens:.2f}**, la tarifa actual "
+                f"(**${tarifa_base:.2f}**) supera el break-even (**${tarifa_be:.4f}**). "
+                "El proyecto genera VAN positivo."
+            )
+        else:
+            st.warning(
+                f"⚠️ Con galón a **${precio_galon_sens:.2f}**, la tarifa debería subir "
+                f"de **${tarifa_base:.2f}** a **${tarifa_be:.4f}** para alcanzar VAN = 0."
+            )
 
 
 def render_tab_demanda(res: dict):
