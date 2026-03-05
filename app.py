@@ -552,23 +552,58 @@ def render_tabla(df: pd.DataFrame, entero: bool = False, titulo: str = ""):
 
 def render_tab_resumen(res: dict, p: dict, troncal_sel: str):
     """Tab: Resumen Ejecutivo con KPIs, gráficos y análisis de sensibilidad."""
-    render_kpis(res, p)
+    import json
+
+    es_consolidado = (troncal_sel == "Consolidado")
+
+    # ── Selector de troncales (solo vista Consolidado) ────────────
+    if es_consolidado:
+        seleccion = st.multiselect(
+            "Troncales incluidas en el consolidado:",
+            options=list(TRONCALES.keys()),
+            default=list(TRONCALES.keys()),
+            key="consolidado_seleccion",
+        )
+        if not seleccion:
+            st.info("Selecciona al menos una troncal para ver el análisis.")
+            return
+
+        troncales_custom = {k: TRONCALES[k] for k in seleccion}
+        troncales_frozen = json.dumps(troncales_custom, sort_keys=True, default=str)
+        seleccion_str    = " + ".join(t.replace("Troncal ", "T") for t in seleccion)
+        etiqueta_flujo   = f"el flujo consolidado ({seleccion_str})"
+
+        @st.cache_data(show_spinner="Calculando consolidado…")
+        def _calc_custom(frozen: str) -> dict:
+            import json as _j
+            return calcular_consolidado(_j.loads(frozen))
+
+        res_active = _calc_custom(troncales_frozen)
+        p_active   = list(troncales_custom.values())[0]
+    else:
+        troncales_custom = None
+        troncales_frozen = None
+        seleccion_str    = ""
+        etiqueta_flujo   = f"el flujo de {troncal_sel}"
+        res_active       = res
+        p_active         = p
+
+    # ── KPIs ──────────────────────────────────────────────────────
+    render_kpis(res_active, p_active)
     st.divider()
+
+    # ── Gráficos ──────────────────────────────────────────────────
     col1, col2 = st.columns(2)
     with col1:
-        st.plotly_chart(fig_ingresos_vs_costos(res), use_container_width=True)
-        st.plotly_chart(fig_flujo_acumulado(res),    use_container_width=True)
+        st.plotly_chart(fig_ingresos_vs_costos(res_active), use_container_width=True)
+        st.plotly_chart(fig_flujo_acumulado(res_active),    use_container_width=True)
     with col2:
-        st.plotly_chart(fig_flujo_barras(res),        use_container_width=True)
-        st.plotly_chart(fig_composicion_costos(res),  use_container_width=True)
+        st.plotly_chart(fig_flujo_barras(res_active),        use_container_width=True)
+        st.plotly_chart(fig_composicion_costos(res_active),  use_container_width=True)
 
     # ── ANÁLISIS DE SENSIBILIDAD ──────────────────────────────────
     st.divider()
     st.subheader("🔎 Análisis de Sensibilidad")
-
-    es_consolidado = (troncal_sel == "Consolidado")
-    etiqueta_flujo = "el flujo consolidado (T1+T2+T3+T4)" if es_consolidado else f"el flujo de {troncal_sel}"
-
     st.caption(
         f"Modifica el **precio del galón de combustible** y calcula la **tarifa GENERAL** "
         f"mínima que hace VAN = 0 para {etiqueta_flujo}, "
@@ -576,19 +611,20 @@ def render_tab_resumen(res: dict, p: dict, troncal_sel: str):
     )
 
     @st.cache_data(show_spinner="Calculando sensibilidad…")
-    def _sens_consolidado(precio_galon: float) -> tuple:
-        import copy
-        params_van = copy.deepcopy(TRONCALES)
+    def _sens_consolidado(precio_galon: float, t_frozen: str) -> tuple:
+        import json as _j, copy
+        troncales_params = _j.loads(t_frozen)
+        params_van = copy.deepcopy(troncales_params)
         for pt in params_van.values():
             pt["precio_galon"] = precio_galon
         van_actual = calcular_consolidado(params_van)["van"]
-        tarifa_be  = tarifa_general_van_cero(precio_galon, TRONCALES)
+        tarifa_be  = tarifa_general_van_cero(precio_galon, troncales_params)
         return van_actual, tarifa_be
 
     @st.cache_data(show_spinner="Calculando sensibilidad…")
     def _sens_troncal(precio_galon: float, p_frozen: str) -> tuple:
-        import json, copy
-        params = json.loads(p_frozen)
+        import json as _j, copy
+        params = _j.loads(p_frozen)
         p_test = copy.deepcopy(params)
         p_test["precio_galon"] = precio_galon
         van_actual = calcular_modelo(p_test)["van"]
@@ -603,13 +639,12 @@ def render_tab_resumen(res: dict, p: dict, troncal_sel: str):
     )
 
     if es_consolidado:
-        van_actual, tarifa_be = _sens_consolidado(precio_galon_sens)
-        tarifa_base  = list(TRONCALES.values())[0]["tarifas"]["GENERAL"]
+        van_actual, tarifa_be = _sens_consolidado(precio_galon_sens, troncales_frozen)
+        tarifa_base  = p_active["tarifas"]["GENERAL"]
         label_van    = "VAN Consolidado"
-        label_be_sub = "Break-even del consolidado"
+        label_be_sub = f"Break-even ({seleccion_str})"
     else:
-        import json as _json
-        p_frozen    = _json.dumps(p, sort_keys=True, default=str)
+        p_frozen    = json.dumps(p, sort_keys=True, default=str)
         van_actual, tarifa_be = _sens_troncal(precio_galon_sens, p_frozen)
         tarifa_base  = p["tarifas"]["GENERAL"]
         label_van    = f"VAN {troncal_sel}"
