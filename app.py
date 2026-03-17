@@ -289,6 +289,18 @@ def render_sidebar() -> dict:
                 value=int(p["unidades_alim"]), step=1,
                 help=TOOLTIPS["unidades_alim"], key=f"{t}_unidades_alim"
             )
+            p["precio_bus_troncal"] = st.number_input(
+                "Costo bus troncal (18 m) USD", min_value=0.0,
+                value=float(p["precio_bus_troncal"]),
+                step=1000.0, format="%.2f",
+                help=TOOLTIPS["precio_bus_troncal"], key=f"{t}_precio_bus_troncal"
+            )
+            p["precio_bus_alimentador"] = st.number_input(
+                "Costo bus alimentador (12 m) USD", min_value=0.0,
+                value=float(p["precio_bus_alimentador"]),
+                step=1000.0, format="%.2f",
+                help=TOOLTIPS["precio_bus_alimentador"], key=f"{t}_precio_bus_alim"
+            )
 
         # ── FINANCIAMIENTO ───────────────────────────────────────
         with st.expander("🏦 Financiamiento", expanded=False):
