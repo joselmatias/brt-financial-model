@@ -83,7 +83,7 @@ TRONCAL_1_DEFAULT = {
     "porcentaje_equity":             0.20,
 
     # --- Costos Fijos: Sueldos ---
-    "salario_mensual":             900.0,
+    "salario_mensual":             960.85,
     "choferes_por_bus_troncal":      2.4,
     "choferes_por_bus_alim":         2.4,
 
@@ -278,7 +278,7 @@ TRONCAL_2_DEFAULT = {
     "porcentaje_equity":             0.20,
 
     # --- Costos Fijos: Sueldos ---
-    "salario_mensual":             900.0,
+    "salario_mensual":             960.85,
     "choferes_por_bus_troncal":      2.4,
     "choferes_por_bus_alim":         2.4,
 
@@ -411,7 +411,7 @@ TRONCAL_3_DEFAULT = {
     "porcentaje_equity":             0.20,
 
     # --- Costos Fijos: Sueldos ---
-    "salario_mensual":             900.0,
+    "salario_mensual":             960.85,
     "choferes_por_bus_troncal":      2.4,
     "choferes_por_bus_alim":         2.4,
 
@@ -545,7 +545,7 @@ TRONCAL_4_DEFAULT = {
     "porcentaje_equity":             0.20,
 
     # --- Costos Fijos: Sueldos ---
-    "salario_mensual":             900.0,
+    "salario_mensual":             960.85,
     "choferes_por_bus_troncal":      2.4,
     "choferes_por_bus_alim":         2.4,
 
